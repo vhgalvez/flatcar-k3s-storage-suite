@@ -1,23 +1,33 @@
 ---
-- name: Limpiar posibles firmas anteriores
-  raw: wipefs -a /dev/vdb
+- name: Detener servicios que puedan usar /dev/vdb
+  raw: |
+    umount -f /dev/mapper/* || true
+    umount -f /mnt/longhorn-disk || true
+    umount -f /srv/nfs/* || true
   ignore_errors: true
 
-- name: Crear grupo de volúmenes LVM
-  raw: vgcreate vg_data /dev/vdb
+- name: Eliminar LVM existente (si existe)
+  raw: |
+    lvremove -f vg_data || true
+    vgremove -f vg_data || true
+    wipefs -a /dev/vdb || true
+    pvremove -f /dev/vdb || true
   ignore_errors: true
+
+- name: Crear nuevo volumen físico
+  raw: pvcreate /dev/vdb
+
+- name: Crear nuevo grupo de volúmenes
+  raw: vgcreate vg_data /dev/vdb
 
 - name: Crear volumen lógico para PostgreSQL
   raw: lvcreate -L 10G -n postgresql_lv vg_data
-  ignore_errors: true
 
 - name: Crear volumen lógico para datos compartidos
   raw: lvcreate -L 10G -n shared_lv vg_data
-  ignore_errors: true
 
 - name: Crear volumen lógico para Longhorn
   raw: lvcreate -L 40G -n longhorn_lv vg_data
-  ignore_errors: true
 
 - name: Formatear y montar volúmenes
   raw: |
@@ -29,10 +39,8 @@
     mkdir -p /srv/nfs/shared
     mkdir -p /mnt/longhorn-disk
 
-    grep -q '/srv/nfs/postgresql' /etc/fstab || echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
-    grep -q '/srv/nfs/shared' /etc/fstab || echo '/dev/vg_data/shared_lv /srv/nfs/shared ext4 defaults 0 2' >> /etc/fstab
-    grep -q '/mnt/longhorn-disk' /etc/fstab || echo '/dev/vg_data/longhorn_lv /mnt/longhorn-disk ext4 defaults 0 2' >> /etc/fstab
+    grep -q postgresql_lv /etc/fstab || echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
+    grep -q shared_lv /etc/fstab || echo '/dev/vg_data/shared_lv /srv/nfs/shared ext4 defaults 0 2' >> /etc/fstab
+    grep -q longhorn_lv /etc/fstab || echo '/dev/vg_data/longhorn_lv /mnt/longhorn-disk ext4 defaults 0 2' >> /etc/fstab
 
     mount -a
-
-    chmod 777 /mnt/longhorn-disk
