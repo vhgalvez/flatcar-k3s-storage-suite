@@ -1,7 +1,6 @@
 ---
 - name: Detener servicios que puedan usar /dev/vdb
-  raw: |
-    systemctl stop nfs-server || true
+  raw: systemctl stop nfs-server || true
   ignore_errors: true
 
 - name: Desmontar volúmenes si están montados
@@ -13,15 +12,15 @@
 
 - name: Eliminar volúmenes lógicos creados por Ansible
   raw: |
-    if lvdisplay /dev/vg_data/postgresql_lv >/dev/null 2>&1; then lvremove -fy /dev/vg_data/postgresql_lv; fi
-    if lvdisplay /dev/vg_data/shared_lv     >/dev/null 2>&1; then lvremove -fy /dev/vg_data/shared_lv; fi
-    if lvdisplay /dev/vg_data/longhorn_lv   >/dev/null 2>&1; then lvremove -fy /dev/vg_data/longhorn_lv; fi
+    lvremove -fy /dev/vg_data/postgresql_lv || true
+    lvremove -fy /dev/vg_data/shared_lv || true
+    lvremove -fy /dev/vg_data/longhorn_lv || true
   ignore_errors: true
 
 - name: Eliminar grupo de volúmenes si está vacío
   raw: |
-    if vgdisplay vg_data >/dev/null 2>&1 && [ "$(lvs --noheadings vg_data | wc -l)" -eq 0 ]; then
-      vgremove -fy vg_data
+    if [ "$(lvs --noheadings vg_data | wc -l)" -eq 0 ]; then
+      vgremove -fy vg_data || true
     fi
   ignore_errors: true
 
@@ -84,3 +83,14 @@
 - name: Montar todos los volúmenes
   raw: mount -a
   ignore_errors: false
+
+- name: Crear configuración mínima de NFS
+  raw: |
+    mkdir -p /etc/exports.d
+    echo "/srv/nfs/postgresql *(rw,sync,no_subtree_check,no_root_squash)" > /etc/exports
+    echo "/srv/nfs/shared     *(rw,sync,no_subtree_check,no_root_squash)" >> /etc/exports
+  ignore_errors: false
+
+- name: Reiniciar servicio NFS
+  raw: systemctl restart nfs-server || true
+  ignore_errors: true
