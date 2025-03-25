@@ -7,57 +7,72 @@
 - name: Desmontar volúmenes si están montados
   raw: |
     mountpoint -q /srv/nfs/postgresql && umount /srv/nfs/postgresql || true
-    mountpoint -q /srv/nfs/shared && umount /srv/nfs/shared || true
+    mountpoint -q /srv/nfs/shared     && umount /srv/nfs/shared     || true
     mountpoint -q /mnt/longhorn-disk && umount /mnt/longhorn-disk || true
   ignore_errors: true
 
-- name: Eliminar volúmenes lógicos creados por Ansible si existen
+- name: Eliminar volúmenes lógicos creados por Ansible
   raw: |
-    lvdisplay /dev/vg_data/postgresql_lv >/dev/null 2>&1 && lvremove -fy /dev/vg_data/postgresql_lv || true
-    lvdisplay /dev/vg_data/shared_lv     >/dev/null 2>&1 && lvremove -fy /dev/vg_data/shared_lv || true
-    lvdisplay /dev/vg_data/longhorn_lv   >/dev/null 2>&1 && lvremove -fy /dev/vg_data/longhorn_lv || true
+    if lvdisplay /dev/vg_data/postgresql_lv >/dev/null 2>&1; then lvremove -fy /dev/vg_data/postgresql_lv; fi
+    if lvdisplay /dev/vg_data/shared_lv     >/dev/null 2>&1; then lvremove -fy /dev/vg_data/shared_lv; fi
+    if lvdisplay /dev/vg_data/longhorn_lv   >/dev/null 2>&1; then lvremove -fy /dev/vg_data/longhorn_lv; fi
   ignore_errors: true
 
 - name: Eliminar grupo de volúmenes si está vacío
   raw: |
-    if vgdisplay vg_data >/dev/null 2>&1 && [ $(lvs --noheadings vg_data | wc -l) -eq 0 ]; then vgremove -fy vg_data; fi
+    if vgdisplay vg_data >/dev/null 2>&1 && [ "$(lvs --noheadings vg_data | wc -l)" -eq 0 ]; then
+      vgremove -fy vg_data
+    fi
   ignore_errors: true
 
 - name: Crear nuevo volumen físico si /dev/vdb no está en uso
   raw: |
-    pvs | grep -q /dev/vdb || pvcreate /dev/vdb
+    if ! pvs | grep -q "/dev/vdb"; then
+      pvcreate /dev/vdb
+    fi
   ignore_errors: false
 
 - name: Crear nuevo grupo de volúmenes si no existe
   raw: |
-    vgdisplay vg_data >/dev/null 2>&1 || vgcreate vg_data /dev/vdb
+    if ! vgdisplay vg_data >/dev/null 2>&1; then
+      vgcreate vg_data /dev/vdb
+    fi
   ignore_errors: false
 
-- name: Crear volumen lógico para PostgreSQL si no existe
+- name: Crear volumen lógico para PostgreSQL
   raw: |
-    lvdisplay /dev/vg_data/postgresql_lv >/dev/null 2>&1 || lvcreate -L 10G -n postgresql_lv vg_data
+    if ! lvdisplay /dev/vg_data/postgresql_lv >/dev/null 2>&1; then
+      lvcreate -L 10G -n postgresql_lv vg_data
+    fi
   ignore_errors: false
 
-- name: Crear volumen lógico para datos compartidos si no existe
+- name: Crear volumen lógico para datos compartidos
   raw: |
-    lvdisplay /dev/vg_data/shared_lv >/dev/null 2>&1 || lvcreate -L 10G -n shared_lv vg_data
+    if ! lvdisplay /dev/vg_data/shared_lv >/dev/null 2>&1; then
+      lvcreate -L 10G -n shared_lv vg_data
+    fi
   ignore_errors: false
 
-- name: Crear volumen lógico para Longhorn si no existe
+- name: Crear volumen lógico para Longhorn
   raw: |
-    lvdisplay /dev/vg_data/longhorn_lv >/dev/null 2>&1 || lvcreate -L 60G -n longhorn_lv vg_data
+    if ! lvdisplay /dev/vg_data/longhorn_lv >/dev/null 2>&1; then
+      lvcreate -L 60G -n longhorn_lv vg_data
+    fi
   ignore_errors: false
 
-- name: Formatear y montar volúmenes si no están montados
+- name: Formatear y montar volúmenes
   raw: |
-    if ! blkid /dev/vg_data/postgresql_lv | grep -q ext4; then mkfs.ext4 -F /dev/vg_data/postgresql_lv; fi
-    if ! blkid /dev/vg_data/shared_lv | grep -q ext4; then mkfs.ext4 -F /dev/vg_data/shared_lv; fi
-    if ! blkid /dev/vg_data/longhorn_lv | grep -q ext4; then mkfs.ext4 -F /dev/vg_data/longhorn_lv; fi
+    mkfs.ext4 -F /dev/vg_data/postgresql_lv
+    mkfs.ext4 -F /dev/vg_data/shared_lv
+    mkfs.ext4 -F /dev/vg_data/longhorn_lv
 
-    mkdir -p /srv/nfs/postgresql /srv/nfs/shared /mnt/longhorn-disk
+    mkdir -p /srv/nfs/postgresql
+    mkdir -p /srv/nfs/shared
+    mkdir -p /mnt/longhorn-disk
 
     grep -q '/srv/nfs/postgresql' /etc/fstab || echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
     grep -q '/srv/nfs/shared'     /etc/fstab || echo '/dev/vg_data/shared_lv     /srv/nfs/shared     ext4 defaults 0 2' >> /etc/fstab
     grep -q '/mnt/longhorn-disk' /etc/fstab || echo '/dev/vg_data/longhorn_lv   /mnt/longhorn-disk ext4 defaults 0 2' >> /etc/fstab
 
     mount -a
+  ignore_errors: false
