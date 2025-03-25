@@ -1,6 +1,6 @@
----
 - name: Instalar NFS (raw)
-  raw: apk update && apk add nfs-utils || true
+  raw: |
+    apk update && apk add nfs-utils || apt update && apt install -y nfs-kernel-server || true
 
 - name: Configurar /etc/exports
   copy:

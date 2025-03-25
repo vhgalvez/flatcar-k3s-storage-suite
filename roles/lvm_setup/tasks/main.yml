@@ -1,17 +1,18 @@
 ---
 - name: Detener servicios que puedan usar /dev/vdb
   raw: |
-    umount -f /dev/mapper/* || true
+    umount -f /srv/nfs/postgresql || true
+    umount -f /srv/nfs/shared || true
     umount -f /mnt/longhorn-disk || true
-    umount -f /srv/nfs/* || true
   ignore_errors: true
 
 - name: Eliminar LVM existente (si existe)
   raw: |
-    lvremove -f vg_data || true
-    vgremove -f vg_data || true
-    wipefs -a /dev/vdb || true
-    pvremove -f /dev/vdb || true
+    lvremove -y /dev/vg_data/postgresql_lv || true
+    lvremove -y /dev/vg_data/shared_lv || true
+    lvremove -y /dev/vg_data/longhorn_lv || true
+    vgremove -y vg_data || true
+    pvremove -y /dev/vdb || true
   ignore_errors: true
 
 - name: Crear nuevo volumen físico
@@ -27,20 +28,15 @@
   raw: lvcreate -L 10G -n shared_lv vg_data
 
 - name: Crear volumen lógico para Longhorn
-  raw: lvcreate -L 40G -n longhorn_lv vg_data
+  raw: lvcreate -L 60G -n longhorn_lv vg_data
 
 - name: Formatear y montar volúmenes
   raw: |
     mkfs.ext4 /dev/vg_data/postgresql_lv
     mkfs.ext4 /dev/vg_data/shared_lv
     mkfs.ext4 /dev/vg_data/longhorn_lv
-
-    mkdir -p /srv/nfs/postgresql
-    mkdir -p /srv/nfs/shared
-    mkdir -p /mnt/longhorn-disk
-
-    grep -q postgresql_lv /etc/fstab || echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
-    grep -q shared_lv /etc/fstab || echo '/dev/vg_data/shared_lv /srv/nfs/shared ext4 defaults 0 2' >> /etc/fstab
-    grep -q longhorn_lv /etc/fstab || echo '/dev/vg_data/longhorn_lv /mnt/longhorn-disk ext4 defaults 0 2' >> /etc/fstab
-
+    mkdir -p /srv/nfs/postgresql /srv/nfs/shared /mnt/longhorn-disk
+    grep -q postgresql /etc/fstab || echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
+    grep -q shared /etc/fstab || echo '/dev/vg_data/shared_lv /srv/nfs/shared ext4 defaults 0 2' >> /etc/fstab
+    grep -q longhorn /etc/fstab || echo '/dev/vg_data/longhorn_lv /mnt/longhorn-disk ext4 defaults 0 2' >> /etc/fstab
     mount -a

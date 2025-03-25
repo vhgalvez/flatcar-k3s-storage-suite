@@ -1,8 +1,8 @@
----
-- name: Asegurar permisos correctos en Longhorn
-  raw: |
-    mkdir -p /mnt/longhorn-disk
-    chmod 777 /mnt/longhorn-disk
+- name: Crear directorio de Longhorn
+  file:
+    path: /mnt/longhorn-disk
+    state: directory
+    mode: '0777'
 
 - name: Etiquetar nodo para Longhorn
   shell: kubectl label node storage1.cefaslocalserver.com longhorn-node=true --overwrite || true
