@@ -5,5 +5,5 @@
   become: true
   roles:
     - lvm_setup
-    - nfs_server
+    - nfs_mount
     - longhorn_node
