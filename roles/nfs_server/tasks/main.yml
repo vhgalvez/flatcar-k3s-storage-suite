@@ -1,14 +1,56 @@
-- name: Instalar NFS (raw)
+---
+- name: Detener servicios que puedan usar /dev/vdb
   raw: |
-    apk update && apk add nfs-utils || apt update && apt install -y nfs-kernel-server || true
+    systemctl stop nfs-server || true
+  ignore_errors: true
 
-- name: Escribir contenido en /etc/exports (modo raw para Flatcar)
+- name: Eliminar volúmenes lógicos si existen
   raw: |
-    echo '/srv/nfs/postgresql 10.17.4.0/24(rw,sync,no_root_squash,no_subtree_check)' > /etc/exports
-    echo '/srv/nfs/shared     10.17.4.0/24(rw,sync,no_root_squash,no_subtree_check)' >> /etc/exports
+    lvremove -y /dev/vg_data/postgresql_lv || true
+    lvremove -y /dev/vg_data/shared_lv || true
+    lvremove -y /dev/vg_data/longhorn_lv || true
+  ignore_errors: true
 
-- name: Recargar exportfs
-  raw: exportfs -rav
+- name: Eliminar grupo de volúmenes si está vacío
+  raw: vgremove -y vg_data || true
+  ignore_errors: true
 
-- name: Habilitar y reiniciar NFS
-  raw: systemctl enable nfs-server && systemctl restart nfs-server || true
+- name: Eliminar volumen físico solo si es /dev/vdb
+  raw: pvremove -y /dev/vdb || true
+  ignore_errors: true
+
+- name: Crear nuevo volumen físico en /dev/vdb
+  raw: pvcreate /dev/vdb
+  ignore_errors: false
+
+- name: Crear nuevo grupo de volúmenes
+  raw: vgcreate vg_data /dev/vdb
+  ignore_errors: false
+
+- name: Crear volumen lógico para PostgreSQL
+  raw: lvcreate -L 10G -n postgresql_lv vg_data
+  ignore_errors: false
+
+- name: Crear volumen lógico para datos compartidos
+  raw: lvcreate -L 10G -n shared_lv vg_data
+  ignore_errors: false
+
+- name: Crear volumen lógico para Longhorn
+  raw: lvcreate -L 60G -n longhorn_lv vg_data
+  ignore_errors: false
+
+- name: Formatear y montar volúmenes
+  raw: |
+    mkfs.ext4 /dev/vg_data/postgresql_lv
+    mkfs.ext4 /dev/vg_data/shared_lv
+    mkfs.ext4 /dev/vg_data/longhorn_lv
+
+    mkdir -p /srv/nfs/postgresql
+    mkdir -p /srv/nfs/shared
+    mkdir -p /mnt/longhorn-disk
+
+    grep -q '/srv/nfs/postgresql' /etc/fstab || echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
+    grep -q '/srv/nfs/shared'     /etc/fstab || echo '/dev/vg_data/shared_lv     /srv/nfs/shared     ext4 defaults 0 2' >> /etc/fstab
+    grep -q '/mnt/longhorn-disk' /etc/fstab || echo '/dev/vg_data/longhorn_lv   /mnt/longhorn-disk ext4 defaults 0 2' >> /etc/fstab
+
+    mount -a
