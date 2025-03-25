@@ -4,36 +4,35 @@
     systemctl stop nfs-server || true
   ignore_errors: true
 
+- name: Desmontar volúmenes si están montados
+  raw: |
+    umount /srv/nfs/postgresql || true
+    umount /srv/nfs/shared || true
+    umount /mnt/longhorn-disk || true
+  ignore_errors: true
+
 - name: Eliminar volúmenes lógicos creados por Ansible
   raw: |
-    if lvdisplay /dev/vg_data/postgresql_lv >/dev/null 2>&1; then lvremove -y /dev/vg_data/postgresql_lv; fi
-    if lvdisplay /dev/vg_data/shared_lv >/dev/null 2>&1; then lvremove -y /dev/vg_data/shared_lv; fi
-    if lvdisplay /dev/vg_data/longhorn_lv >/dev/null 2>&1; then lvremove -y /dev/vg_data/longhorn_lv; fi
+    if lvdisplay /dev/vg_data/postgresql_lv >/dev/null 2>&1; then lvremove -fy /dev/vg_data/postgresql_lv; fi
+    if lvdisplay /dev/vg_data/shared_lv >/dev/null 2>&1; then lvremove -fy /dev/vg_data/shared_lv; fi
+    if lvdisplay /dev/vg_data/longhorn_lv >/dev/null 2>&1; then lvremove -fy /dev/vg_data/longhorn_lv; fi
   ignore_errors: true
 
 - name: Eliminar grupo de volúmenes si está vacío
   raw: |
-    if [ "$(vgdisplay vg_data 2>/dev/null | grep 'VG Name')" != "" ]; then
-      lv_count=$(lvs --noheadings vg_data | wc -l)
-      if [ "$lv_count" -eq 0 ]; then
-        vgremove -y vg_data
-      fi
+    if vgdisplay vg_data >/dev/null 2>&1 && [ $(lvs --noheadings vg_data | wc -l) -eq 0 ]; then
+      vgremove -fy vg_data
     fi
   ignore_errors: true
 
-- name: Eliminar volumen físico solo si es /dev/vdb y no pertenece a otro VG
+- name: Crear nuevo volumen físico si /dev/vdb no está en uso
   raw: |
-    if ! pvs /dev/vdb | grep -q vg_data; then
-      pvremove -y /dev/vdb || true
-    fi
-  ignore_errors: true
-
-- name: Crear nuevo volumen físico en /dev/vdb
-  raw: pvcreate /dev/vdb
+    if ! pvs | grep -q /dev/vdb; then pvcreate /dev/vdb; fi
   ignore_errors: false
 
-- name: Crear nuevo grupo de volúmenes
-  raw: vgcreate vg_data /dev/vdb
+- name: Crear nuevo grupo de volúmenes si no existe
+  raw: |
+    if ! vgdisplay vg_data >/dev/null 2>&1; then vgcreate vg_data /dev/vdb; fi
   ignore_errors: false
 
 - name: Crear volumen lógico para PostgreSQL
@@ -50,9 +49,9 @@
 
 - name: Formatear y montar volúmenes
   raw: |
-    mkfs.ext4 /dev/vg_data/postgresql_lv
-    mkfs.ext4 /dev/vg_data/shared_lv
-    mkfs.ext4 /dev/vg_data/longhorn_lv
+    mkfs.ext4 -F /dev/vg_data/postgresql_lv
+    mkfs.ext4 -F /dev/vg_data/shared_lv
+    mkfs.ext4 -F /dev/vg_data/longhorn_lv
 
     mkdir -p /srv/nfs/postgresql
     mkdir -p /srv/nfs/shared
