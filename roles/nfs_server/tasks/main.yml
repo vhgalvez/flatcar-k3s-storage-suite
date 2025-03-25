@@ -4,19 +4,28 @@
     systemctl stop nfs-server || true
   ignore_errors: true
 
-- name: Eliminar volúmenes lógicos si existen
+- name: Eliminar volúmenes lógicos creados por Ansible
   raw: |
-    lvremove -y /dev/vg_data/postgresql_lv || true
-    lvremove -y /dev/vg_data/shared_lv || true
-    lvremove -y /dev/vg_data/longhorn_lv || true
+    if lvdisplay /dev/vg_data/postgresql_lv >/dev/null 2>&1; then lvremove -y /dev/vg_data/postgresql_lv; fi
+    if lvdisplay /dev/vg_data/shared_lv >/dev/null 2>&1; then lvremove -y /dev/vg_data/shared_lv; fi
+    if lvdisplay /dev/vg_data/longhorn_lv >/dev/null 2>&1; then lvremove -y /dev/vg_data/longhorn_lv; fi
   ignore_errors: true
 
 - name: Eliminar grupo de volúmenes si está vacío
-  raw: vgremove -y vg_data || true
+  raw: |
+    if [ "$(vgdisplay vg_data 2>/dev/null | grep 'VG Name')" != "" ]; then
+      lv_count=$(lvs --noheadings vg_data | wc -l)
+      if [ "$lv_count" -eq 0 ]; then
+        vgremove -y vg_data
+      fi
+    fi
   ignore_errors: true
 
-- name: Eliminar volumen físico solo si es /dev/vdb
-  raw: pvremove -y /dev/vdb || true
+- name: Eliminar volumen físico solo si es /dev/vdb y no pertenece a otro VG
+  raw: |
+    if ! pvs /dev/vdb | grep -q vg_data; then
+      pvremove -y /dev/vdb || true
+    fi
   ignore_errors: true
 
 - name: Crear nuevo volumen físico en /dev/vdb
