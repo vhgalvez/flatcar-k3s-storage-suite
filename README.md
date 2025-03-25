@@ -84,3 +84,7 @@ vhgalvez
 
 🛡️ Licencia
 MIT License — Puedes usarlo libremente con fines educativos o personales.
+
+
+
+
