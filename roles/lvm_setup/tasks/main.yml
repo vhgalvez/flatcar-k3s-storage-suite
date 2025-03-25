@@ -1,24 +1,10 @@
 ---
-- name: Crear partición adicional en /dev/vda para LVM
-  raw: |
-    parted -s /dev/vda mkpart primary ext4 70% 100%
-    partprobe
-  ignore_errors: true
-
-- name: Esperar a que aparezca /dev/vda8
-  raw: |
-    for i in $(seq 1 10); do
-      [ -e /dev/vda8 ] && exit 0
-      sleep 2
-    done
-    exit 1
-
 - name: Limpiar posibles firmas anteriores
-  raw: wipefs -a /dev/vda8
+  raw: wipefs -a /dev/vdb
   ignore_errors: true
 
 - name: Crear grupo de volúmenes LVM
-  raw: vgcreate vg_data /dev/vda8
+  raw: vgcreate vg_data /dev/vdb
   ignore_errors: true
 
 - name: Crear volumen lógico para PostgreSQL

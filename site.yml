@@ -3,43 +3,7 @@
   become: yes
   gather_facts: no
 
-  tasks:
-    - name: Create LVM volume group (raw)
-      raw: vgcreate vg_data /dev/sdb || true
-
-    - name: Create logical volume for PostgreSQL (raw)
-      raw: lvcreate -L 10G -n postgresql_lv vg_data || true
-
-    - name: Format and mount volume for PostgreSQL (raw)
-      raw: |
-        mkfs.ext4 /dev/vg_data/postgresql_lv
-        mkdir -p /srv/nfs/postgresql
-        echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
-        mount -a
-
-    - name: Create shared NFS directory (raw)
-      raw: mkdir -p /srv/nfs/shared
-
-    - name: Install NFS server (raw)
-      raw: apk update && apk add nfs-utils || apt update && apt install -y nfs-kernel-server || true
-
-    - name: Configure /etc/exports
-      copy:
-        dest: /etc/exports
-        content: |
-          /srv/nfs/postgresql 10.17.4.0/24(rw,sync,no_root_squash,no_subtree_check)
-          /srv/nfs/shared     10.17.4.0/24(rw,sync,no_root_squash,no_subtree_check)
-
-    - name: Reload NFS exports (raw)
-      raw: exportfs -rav
-
-    - name: Enable and restart NFS (raw)
-      raw: systemctl enable nfs-server && systemctl restart nfs-server || true
-
-    - name: Create Longhorn disk mount directory (raw)
-      raw: mkdir -p /mnt/longhorn-disk && chmod 777 /mnt/longhorn-disk
-
-    - name: Label node for Longhorn (kubectl)
-      shell: kubectl label node storage1.cefaslocalserver.com longhorn-node=true --overwrite || true
-      args:
-        warn: false
+  roles:
+    - role: lvm_setup
+    - role: nfs_server
+    - role: longhorn_node
