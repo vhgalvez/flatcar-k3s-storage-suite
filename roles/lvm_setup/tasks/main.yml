@@ -28,7 +28,7 @@
   raw: lvcreate -L 10G -n shared_lv vg_data
 
 - name: Crear volumen lógico para Longhorn
-  raw: lvcreate -L 60G -n longhorn_lv vg_data
+  raw: lvcreate -L  59.9G longhorn_lv vg_data
 
 - name: Formatear y montar volúmenes
   raw: |
