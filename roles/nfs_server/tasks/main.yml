@@ -6,56 +6,55 @@
 
 - name: Desmontar volúmenes si están montados
   raw: |
-    umount /srv/nfs/postgresql || true
-    umount /srv/nfs/shared || true
-    umount /mnt/longhorn-disk || true
+    mountpoint -q /srv/nfs/postgresql && umount /srv/nfs/postgresql || true
+    mountpoint -q /srv/nfs/shared && umount /srv/nfs/shared || true
+    mountpoint -q /mnt/longhorn-disk && umount /mnt/longhorn-disk || true
   ignore_errors: true
 
-- name: Eliminar volúmenes lógicos creados por Ansible
+- name: Eliminar volúmenes lógicos creados por Ansible si existen
   raw: |
-    if lvdisplay /dev/vg_data/postgresql_lv >/dev/null 2>&1; then lvremove -fy /dev/vg_data/postgresql_lv; fi
-    if lvdisplay /dev/vg_data/shared_lv >/dev/null 2>&1; then lvremove -fy /dev/vg_data/shared_lv; fi
-    if lvdisplay /dev/vg_data/longhorn_lv >/dev/null 2>&1; then lvremove -fy /dev/vg_data/longhorn_lv; fi
+    lvdisplay /dev/vg_data/postgresql_lv >/dev/null 2>&1 && lvremove -fy /dev/vg_data/postgresql_lv || true
+    lvdisplay /dev/vg_data/shared_lv     >/dev/null 2>&1 && lvremove -fy /dev/vg_data/shared_lv || true
+    lvdisplay /dev/vg_data/longhorn_lv   >/dev/null 2>&1 && lvremove -fy /dev/vg_data/longhorn_lv || true
   ignore_errors: true
 
 - name: Eliminar grupo de volúmenes si está vacío
   raw: |
-    if vgdisplay vg_data >/dev/null 2>&1 && [ $(lvs --noheadings vg_data | wc -l) -eq 0 ]; then
-      vgremove -fy vg_data
-    fi
+    if vgdisplay vg_data >/dev/null 2>&1 && [ $(lvs --noheadings vg_data | wc -l) -eq 0 ]; then vgremove -fy vg_data; fi
   ignore_errors: true
 
 - name: Crear nuevo volumen físico si /dev/vdb no está en uso
   raw: |
-    if ! pvs | grep -q /dev/vdb; then pvcreate /dev/vdb; fi
+    pvs | grep -q /dev/vdb || pvcreate /dev/vdb
   ignore_errors: false
 
 - name: Crear nuevo grupo de volúmenes si no existe
   raw: |
-    if ! vgdisplay vg_data >/dev/null 2>&1; then vgcreate vg_data /dev/vdb; fi
+    vgdisplay vg_data >/dev/null 2>&1 || vgcreate vg_data /dev/vdb
   ignore_errors: false
 
-- name: Crear volumen lógico para PostgreSQL
-  raw: lvcreate -L 10G -n postgresql_lv vg_data
-  ignore_errors: false
-
-- name: Crear volumen lógico para datos compartidos
-  raw: lvcreate -L 10G -n shared_lv vg_data
-  ignore_errors: false
-
-- name: Crear volumen lógico para Longhorn
-  raw: lvcreate -L 60G -n longhorn_lv vg_data
-  ignore_errors: false
-
-- name: Formatear y montar volúmenes
+- name: Crear volumen lógico para PostgreSQL si no existe
   raw: |
-    mkfs.ext4 -F /dev/vg_data/postgresql_lv
-    mkfs.ext4 -F /dev/vg_data/shared_lv
-    mkfs.ext4 -F /dev/vg_data/longhorn_lv
+    lvdisplay /dev/vg_data/postgresql_lv >/dev/null 2>&1 || lvcreate -L 10G -n postgresql_lv vg_data
+  ignore_errors: false
 
-    mkdir -p /srv/nfs/postgresql
-    mkdir -p /srv/nfs/shared
-    mkdir -p /mnt/longhorn-disk
+- name: Crear volumen lógico para datos compartidos si no existe
+  raw: |
+    lvdisplay /dev/vg_data/shared_lv >/dev/null 2>&1 || lvcreate -L 10G -n shared_lv vg_data
+  ignore_errors: false
+
+- name: Crear volumen lógico para Longhorn si no existe
+  raw: |
+    lvdisplay /dev/vg_data/longhorn_lv >/dev/null 2>&1 || lvcreate -L 60G -n longhorn_lv vg_data
+  ignore_errors: false
+
+- name: Formatear y montar volúmenes si no están montados
+  raw: |
+    if ! blkid /dev/vg_data/postgresql_lv | grep -q ext4; then mkfs.ext4 -F /dev/vg_data/postgresql_lv; fi
+    if ! blkid /dev/vg_data/shared_lv | grep -q ext4; then mkfs.ext4 -F /dev/vg_data/shared_lv; fi
+    if ! blkid /dev/vg_data/longhorn_lv | grep -q ext4; then mkfs.ext4 -F /dev/vg_data/longhorn_lv; fi
+
+    mkdir -p /srv/nfs/postgresql /srv/nfs/shared /mnt/longhorn-disk
 
     grep -q '/srv/nfs/postgresql' /etc/fstab || echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
     grep -q '/srv/nfs/shared'     /etc/fstab || echo '/dev/vg_data/shared_lv     /srv/nfs/shared     ext4 defaults 0 2' >> /etc/fstab
