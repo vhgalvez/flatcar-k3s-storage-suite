@@ -2,12 +2,10 @@
   raw: |
     apk update && apk add nfs-utils || apt update && apt install -y nfs-kernel-server || true
 
-- name: Configurar /etc/exports
-  copy:
-    dest: /etc/exports
-    content: |
-      /srv/nfs/postgresql 10.17.4.0/24(rw,sync,no_root_squash,no_subtree_check)
-      /srv/nfs/shared     10.17.4.0/24(rw,sync,no_root_squash,no_subtree_check)
+- name: Escribir contenido en /etc/exports (modo raw para Flatcar)
+  raw: |
+    echo '/srv/nfs/postgresql 10.17.4.0/24(rw,sync,no_root_squash,no_subtree_check)' > /etc/exports
+    echo '/srv/nfs/shared     10.17.4.0/24(rw,sync,no_root_squash,no_subtree_check)' >> /etc/exports
 
 - name: Recargar exportfs
   raw: exportfs -rav
