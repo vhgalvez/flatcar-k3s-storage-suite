@@ -1,96 +1,57 @@
 ---
+
 - name: Detener servicios que puedan usar /dev/vdb
-  raw: systemctl stop nfs-server || true
-  ignore_errors: true
-
-- name: Desmontar volúmenes si están montados
   raw: |
-    mountpoint -q /srv/nfs/postgresql && umount /srv/nfs/postgresql || true
-    mountpoint -q /srv/nfs/shared     && umount /srv/nfs/shared     || true
-    mountpoint -q /mnt/longhorn-disk && umount /mnt/longhorn-disk || true
+    systemctl stop nfs-server || true
   ignore_errors: true
 
-- name: Eliminar volúmenes lógicos creados por Ansible
-  raw: |
-    lvremove -fy /dev/vg_data/postgresql_lv || true
-    lvremove -fy /dev/vg_data/shared_lv || true
-    lvremove -fy /dev/vg_data/longhorn_lv || true
-  ignore_errors: true
-
-- name: Eliminar grupo de volúmenes si está vacío
-  raw: |
-    if [ "$(lvs --noheadings vg_data | wc -l)" -eq 0 ]; then
-      vgremove -fy vg_data || true
-    fi
-  ignore_errors: true
-
-- name: Crear nuevo volumen físico si /dev/vdb no está en uso
+- name: Crear volumen físico si no existe
   raw: |
     if ! pvs | grep -q "/dev/vdb"; then
       pvcreate /dev/vdb
     fi
-  ignore_errors: false
 
-- name: Crear nuevo grupo de volúmenes si no existe
+- name: Crear grupo de volúmenes si no existe
   raw: |
     if ! vgdisplay vg_data >/dev/null 2>&1; then
       vgcreate vg_data /dev/vdb
     fi
-  ignore_errors: false
 
 - name: Crear volumen lógico para PostgreSQL
   raw: |
     if ! lvdisplay /dev/vg_data/postgresql_lv >/dev/null 2>&1; then
       lvcreate -L 10G -n postgresql_lv vg_data
     fi
-  ignore_errors: false
 
 - name: Crear volumen lógico para datos compartidos
   raw: |
     if ! lvdisplay /dev/vg_data/shared_lv >/dev/null 2>&1; then
       lvcreate -L 10G -n shared_lv vg_data
     fi
-  ignore_errors: false
 
 - name: Crear volumen lógico para Longhorn
   raw: |
     if ! lvdisplay /dev/vg_data/longhorn_lv >/dev/null 2>&1; then
       lvcreate -L 60G -n longhorn_lv vg_data
     fi
-  ignore_errors: false
 
-- name: Formatear volúmenes si no tienen sistema de archivos
+- name: Formatear volúmenes si no tienen filesystem
   raw: |
     blkid /dev/vg_data/postgresql_lv || mkfs.ext4 -F /dev/vg_data/postgresql_lv
     blkid /dev/vg_data/shared_lv     || mkfs.ext4 -F /dev/vg_data/shared_lv
     blkid /dev/vg_data/longhorn_lv   || mkfs.ext4 -F /dev/vg_data/longhorn_lv
-  ignore_errors: false
 
 - name: Crear puntos de montaje
   raw: |
     mkdir -p /srv/nfs/postgresql
     mkdir -p /srv/nfs/shared
     mkdir -p /mnt/longhorn-disk
-  ignore_errors: false
 
 - name: Añadir entradas en fstab si no existen
   raw: |
     grep -q '/srv/nfs/postgresql' /etc/fstab || echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
     grep -q '/srv/nfs/shared'     /etc/fstab || echo '/dev/vg_data/shared_lv     /srv/nfs/shared     ext4 defaults 0 2' >> /etc/fstab
     grep -q '/mnt/longhorn-disk' /etc/fstab || echo '/dev/vg_data/longhorn_lv   /mnt/longhorn-disk ext4 defaults 0 2' >> /etc/fstab
-  ignore_errors: false
 
-- name: Montar todos los volúmenes
+- name: Montar volúmenes
   raw: mount -a
-  ignore_errors: false
-
-- name: Crear configuración mínima de NFS
-  raw: |
-    mkdir -p /etc/exports.d
-    echo "/srv/nfs/postgresql *(rw,sync,no_subtree_check,no_root_squash)" > /etc/exports
-    echo "/srv/nfs/shared     *(rw,sync,no_subtree_check,no_root_squash)" >> /etc/exports
-  ignore_errors: false
-
-- name: Reiniciar servicio NFS
-  raw: systemctl restart nfs-server || true
-  ignore_errors: true
