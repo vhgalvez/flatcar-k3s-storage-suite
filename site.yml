@@ -1,5 +1,6 @@
 - name: Configure Storage Node (Longhorn + NFS)
   hosts: storage
+  gather_facts: no   # 👈🏼 ¡Esta línea es esencial para Flatcar!
   become: yes
   roles:
     - lvm_setup
