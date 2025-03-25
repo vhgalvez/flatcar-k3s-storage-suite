@@ -1,0 +1,12 @@
+- name: Create LVM volume for PostgreSQL and Shared Data
+  shell: |
+    pvcreate /dev/sdb || true
+    vgcreate vg_nfs /dev/sdb || true
+    lvcreate -L 20G -n lv_postgresql vg_nfs || true
+    lvcreate -L 10G -n lv_shared vg_nfs || true
+    mkfs.ext4 /dev/vg_nfs/lv_postgresql || true
+    mkfs.ext4 /dev/vg_nfs/lv_shared || true
+    mkdir -p /srv/nfs/postgresql /srv/nfs/shared
+    echo '/dev/vg_nfs/lv_postgresql /srv/nfs/postgresql ext4 defaults 0 0' >> /etc/fstab
+    echo '/dev/vg_nfs/lv_shared /srv/nfs/shared ext4 defaults 0 0' >> /etc/fstab
+    mount -a

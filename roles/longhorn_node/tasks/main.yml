@@ -1,0 +1,10 @@
+- name: Create Longhorn storage disk
+  file:
+    path: /mnt/longhorn-disk
+    state: directory
+    mode: '0777'
+
+- name: Label node for Longhorn
+  shell: kubectl label node storage1.cefaslocalserver.com longhorn-node=true --overwrite || true
+  args:
+    warn: false

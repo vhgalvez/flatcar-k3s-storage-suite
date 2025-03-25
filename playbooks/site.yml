@@ -1,0 +1,7 @@
+- name: Configure Storage Node (Longhorn + NFS)
+  hosts: storage
+  become: yes
+  roles:
+    - lvm_setup
+    - nfs_server
+    - longhorn_node
