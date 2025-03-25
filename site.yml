@@ -1,8 +1,8 @@
 ---
 - name: Configure Storage Node (Longhorn + NFS)
   hosts: storage
-  become: true
+  gather_facts: false
   roles:
-    - role: lvm_setup        # Este prepara todo: volúmenes, formatea y monta
-    - role: nfs_server       # Este solo configura y activa NFS
-    - role: longhorn_node    # Etiquetas y nodos Longhorn
+    - lvm_setup
+    - nfs_server
+    - longhorn_node
