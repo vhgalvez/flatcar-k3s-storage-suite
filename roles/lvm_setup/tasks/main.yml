@@ -1,22 +1,27 @@
+---
+- name: Wipe /dev/sdb to ensure it is clean
+  raw: wipefs -a /dev/sdb
+  ignore_errors: true
+
 - name: Create LVM volume group
-  shell: |
-    vgcreate vg_data /dev/sdb
-  args:
-    warn: false
+  raw: vgcreate vg_data /dev/sdb
   ignore_errors: true
 
 - name: Create logical volume for PostgreSQL
-  shell: |
-    lvcreate -L 10G -n postgresql_lv vg_data
-  args:
-    warn: false
+  raw: lvcreate -L 10G -n postgresql_lv vg_data
   ignore_errors: true
 
-- name: Format volume and create mount point
-  shell: |
+- name: Wait for logical volume to appear
+  raw: |
+    for i in $(seq 1 10); do
+      [ -e /dev/vg_data/postgresql_lv ] && exit 0
+      sleep 2
+    done
+    exit 1
+
+- name: Format and mount volume for PostgreSQL
+  raw: |
     mkfs.ext4 /dev/vg_data/postgresql_lv
     mkdir -p /srv/nfs/postgresql
-    echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
+    grep -q '/srv/nfs/postgresql' /etc/fstab || echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
     mount -a
-  args:
-    warn: false
