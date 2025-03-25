@@ -1,17 +1,31 @@
 ---
-- name: Wipe /dev/sdb to ensure it is clean
-  raw: wipefs -a /dev/sdb
+- name: Crear partición adicional en /dev/vda para LVM
+  raw: |
+    parted -s /dev/vda mkpart primary ext4 70% 100%
+    partprobe
   ignore_errors: true
 
-- name: Create LVM volume group
-  raw: vgcreate vg_data /dev/sdb
+- name: Esperar a que aparezca /dev/vda8
+  raw: |
+    for i in $(seq 1 10); do
+      [ -e /dev/vda8 ] && exit 0
+      sleep 2
+    done
+    exit 1
+
+- name: Limpiar posibles firmas anteriores
+  raw: wipefs -a /dev/vda8
   ignore_errors: true
 
-- name: Create logical volume for PostgreSQL
+- name: Crear grupo de volúmenes LVM
+  raw: vgcreate vg_data /dev/vda8
+  ignore_errors: true
+
+- name: Crear volumen lógico para PostgreSQL
   raw: lvcreate -L 10G -n postgresql_lv vg_data
   ignore_errors: true
 
-- name: Wait for logical volume to appear
+- name: Esperar a que aparezca /dev/vg_data/postgresql_lv
   raw: |
     for i in $(seq 1 10); do
       [ -e /dev/vg_data/postgresql_lv ] && exit 0
@@ -19,7 +33,7 @@
     done
     exit 1
 
-- name: Format and mount volume for PostgreSQL
+- name: Formatear y montar volumen lógico
   raw: |
     mkfs.ext4 /dev/vg_data/postgresql_lv
     mkdir -p /srv/nfs/postgresql
