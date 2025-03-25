@@ -11,17 +11,28 @@
   raw: lvcreate -L 10G -n postgresql_lv vg_data
   ignore_errors: true
 
-- name: Esperar a que aparezca /dev/vg_data/postgresql_lv
-  raw: |
-    for i in $(seq 1 10); do
-      [ -e /dev/vg_data/postgresql_lv ] && exit 0
-      sleep 2
-    done
-    exit 1
+- name: Crear volumen lógico para datos compartidos
+  raw: lvcreate -L 10G -n shared_lv vg_data
+  ignore_errors: true
 
-- name: Formatear y montar volumen lógico
+- name: Crear volumen lógico para Longhorn
+  raw: lvcreate -L 40G -n longhorn_lv vg_data
+  ignore_errors: true
+
+- name: Formatear y montar volúmenes
   raw: |
     mkfs.ext4 /dev/vg_data/postgresql_lv
+    mkfs.ext4 /dev/vg_data/shared_lv
+    mkfs.ext4 /dev/vg_data/longhorn_lv
+
     mkdir -p /srv/nfs/postgresql
+    mkdir -p /srv/nfs/shared
+    mkdir -p /mnt/longhorn-disk
+
     grep -q '/srv/nfs/postgresql' /etc/fstab || echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
+    grep -q '/srv/nfs/shared' /etc/fstab || echo '/dev/vg_data/shared_lv /srv/nfs/shared ext4 defaults 0 2' >> /etc/fstab
+    grep -q '/mnt/longhorn-disk' /etc/fstab || echo '/dev/vg_data/longhorn_lv /mnt/longhorn-disk ext4 defaults 0 2' >> /etc/fstab
+
     mount -a
+
+    chmod 777 /mnt/longhorn-disk

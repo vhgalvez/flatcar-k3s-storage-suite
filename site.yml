@@ -4,6 +4,6 @@
   gather_facts: no
 
   roles:
-    - role: lvm_setup
-    - role: nfs_server
-    - role: longhorn_node
+    - lvm_setup
+    - nfs_server
+    - longhorn_node

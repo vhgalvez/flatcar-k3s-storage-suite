@@ -1,27 +1,16 @@
-- name: Install NFS packages
-  apt:
-    name: nfs-kernel-server
-    state: present
-    update_cache: yes
+---
+- name: Instalar NFS (raw)
+  raw: apk update && apk add nfs-utils || true
 
-- name: Crear directorio compartido adicional
-  file:
-    path: /srv/nfs/shared
-    state: directory
-    mode: '0777'
-
-- name: Export NFS directories
+- name: Configurar /etc/exports
   copy:
     dest: /etc/exports
     content: |
       /srv/nfs/postgresql 10.17.4.0/24(rw,sync,no_root_squash,no_subtree_check)
       /srv/nfs/shared     10.17.4.0/24(rw,sync,no_root_squash,no_subtree_check)
 
-- name: Reload NFS exports
-  command: exportfs -rav
+- name: Recargar exportfs
+  raw: exportfs -rav
 
-- name: Restart NFS service
-  service:
-    name: nfs-kernel-server
-    state: restarted
-    enabled: yes
+- name: Habilitar y reiniciar NFS
+  raw: systemctl enable nfs-server && systemctl restart nfs-server || true
