@@ -2,6 +2,7 @@
 - name: Configure Storage Node (Longhorn + NFS)
   hosts: storage
   gather_facts: false
+  become: true
   roles:
     - lvm_setup
     - nfs_server
