@@ -70,55 +70,70 @@ ansible-storage-cluster/
 ├── site.yml                    # Playbook principal
 ├── nfs_config.yml              # Playbook adicional: exportación NFS
 └── README.md                   # Este archivo
+   
+```
+
 🚀 Ejecución
-1️⃣ Configurar almacenamiento (/dev/vdb)
-bash
-Copiar
-Editar
+
+1️⃣ Configurar almacenamiento (`/dev/vdb`)
+
+```bash
 sudo ansible-playbook -i inventory/hosts.ini site.yml
+```
+
 Esto configura LVM, crea puntos de montaje y prepara los volúmenes para NFS y Longhorn.
 
 2️⃣ Exportar rutas NFS y activar servicio
-bash
-Copiar
-Editar
+
+```bash
 sudo ansible-playbook -i inventory/hosts.ini nfs_config.yml
-Esto asegura que /etc/exports esté correctamente configurado y que el servidor NFS esté activo.
+```
+
+Esto asegura que `/etc/exports` esté correctamente configurado y que el servidor NFS esté activo.
 
 📌 Resultado Esperado
+
 Punto de Montaje	Tamaño	Uso
 /srv/nfs/postgresql	10 GB	Datos de PostgreSQL vía NFS
 /srv/nfs/shared	10 GB	Datos compartidos RWX en pods
 /mnt/longhorn-disk	60 GB	Volúmenes distribuidos Longhorn
+
+
 🧪 Verificación
+
 🔍 Comprobar volúmenes montados
-bash
-Copiar
-Editar
+```bash
 df -h
+```
+
 🔍 Ver exportaciones NFS
-bash
-Copiar
-Editar
+
+```bash
+
 sudo exportfs -v
+```
+
 Deberías ver:
 
-bash
-Copiar
-Editar
+```bash
 /srv/nfs/postgresql  *(rw,sync,no_subtree_check,no_root_squash)
 /srv/nfs/shared      *(rw,sync,no_subtree_check,no_root_squash)
+```
+
 🔍 Estado del servicio NFS
-bash
-Copiar
-Editar
+
+```bash
 systemctl status nfs-server
+```
+
 🧷 Montar NFS desde otro nodo (por ejemplo, postgresql1)
-bash
-Copiar
-Editar
+
+```bash
 sudo mount -t nfs storage1.cefaslocalserver.com:/srv/nfs/postgresql /mnt
+```
+
 🌟 Conclusión
+
 La arquitectura resultante:
 
 ✅ Separa la carga de cómputo y el almacenamiento
@@ -132,7 +147,9 @@ La arquitectura resultante:
 Ideal para entornos educativos, laboratorios o preproducción realistas.
 
 ✍️ Autor
+
 vhgalvez
+
 🔗 FlatcarMicroCloud
 
 🛡️ Licencia
