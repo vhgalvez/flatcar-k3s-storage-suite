@@ -10,22 +10,15 @@
         apt-get update && apt-get install -y nfs-kernel-server || true
       fi
     fi
-  ignore_errors: true
 
-- name: Crear archivo /etc/exports con rutas NFS
-  copy:
-    dest: /etc/exports
-    content: |
-      /srv/nfs/postgresql *(rw,sync,no_subtree_check,no_root_squash)
-      /srv/nfs/shared *(rw,sync,no_subtree_check,no_root_squash)
-    owner: root
-    group: root
-    mode: '0644'
+- name: Crear archivo /etc/exports con rutas NFS si no existe
+  raw: |
+    echo '/srv/nfs/postgresql *(rw,sync,no_subtree_check,no_root_squash)' > /etc/exports
+    echo '/srv/nfs/shared *(rw,sync,no_subtree_check,no_root_squash)' >> /etc/exports
 
 - name: Habilitar y arrancar el servicio nfs-server
   raw: |
     systemctl enable --now nfs-server || true
-  ignore_errors: true
 
 - name: Exportar rutas NFS manualmente
   raw: exportfs -rv
