@@ -1,0 +1,7 @@
+---
+- name: Configurar y exportar rutas NFS
+  hosts: storage
+  become: true
+  gather_facts: false
+  roles:
+    - nfs_config
