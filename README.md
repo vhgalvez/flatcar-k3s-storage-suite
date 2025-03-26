@@ -1,30 +1,58 @@
-# 📦 Ansible Storage Cluster - FlatcarMicroCloud
+# 📦 Ansible Storage Cluster – FlatcarMicroCloud
 
-Este proyecto Ansible automatiza la configuración de un nodo de almacenamiento (`storage1`) en un entorno Kubernetes, especialmente diseñado para **Flatcar Linux** y entornos sin Python. Se utiliza principalmente como parte del proyecto [FlatcarMicroCloud](https://github.com/vhgalvez/FlatcarMicroCloud).
-
-## 🚨 Advertencia Importante
-
-> ⚠️ **Este playbook destruye y recrea todos los volúmenes lógicos (LVM) en el disco `/dev/vdb`.**
->
-> Si ya existen volúmenes con datos importantes en este disco, **haz una copia de seguridad antes de ejecutar** este código.
->
-> Este playbook **está pensado para ejecutarse en entornos desde cero**, típicamente recién provisionados con Terraform para laboratorios y homelabs.
+Este proyecto automatiza la configuración de un nodo de almacenamiento (`storage1`) usando **Ansible**, optimizado para **Flatcar Linux** (sin Python) y clústeres Kubernetes con **K3s**. Forma parte del ecosistema [FlatcarMicroCloud](https://github.com/vhgalvez/FlatcarMicroCloud).
 
 ---
 
-## 🧱 Qué hace este Playbook
+## ✨ Visión General
 
-Este playbook realiza lo siguiente sobre el nodo `storage1`:
+El nodo `storage1` ofrece almacenamiento persistente y distribuido de alta disponibilidad para:
 
-1. Elimina cualquier volumen lógico, grupo de volúmenes o particiones existentes en `/dev/vdb`.
-2. Crea un nuevo volumen físico y grupo de volúmenes (`vg_data`) sobre `/dev/vdb`.
-3. Crea los siguientes volúmenes lógicos:
-   - `postgresql_lv` → montado en `/srv/nfs/postgresql` (10 GB)
-   - `shared_lv` → montado en `/srv/nfs/shared` (10 GB)
-   - `longhorn_lv` → montado en `/mnt/longhorn-disk` (60 GB)
-4. Instala y configura el servidor NFS.
-5. Exporta los volúmenes NFS para que puedan ser montados por otros nodos.
-6. Etiqueta el nodo como compatible con Longhorn.
+- Bases de datos como **PostgreSQL**
+- Datos compartidos entre pods (**RWX**)
+- Volúmenes gestionados por **Longhorn (RWO)**
+
+Utiliza **LVM**, **NFS** y almacenamiento local en `/dev/vdb`.
+
+---
+
+## 📚 Tabla de Roles y Almacenamiento por Nodo
+
+| Nodo        | Disco                 | Rol en Longhorn                    | Observaciones                            |
+|-------------|-----------------------|------------------------------------|------------------------------------------|
+| `storage1`  | `/mnt/longhorn-disk`  | Nodo **dedicado** de almacenamiento | ✅ Ideal: marcar como `Not Schedulable` |
+| `worker1`   | Disco local de 50 GB   | Nodo mixto (cálculo + almacenamiento) | ✅ Recomendado                         |
+| `worker2`   | Disco local de 50 GB   | Nodo mixto                          | ✅                                       |
+| `worker3`   | Disco local de 50 GB   | Nodo mixto                          | ✅                                       |
+
+> ⚠️ Se recomienda marcar `storage1` como **Not Schedulable** en Longhorn para evitar ejecutar pods ahí.
+
+---
+
+## 📁 Directorios Montados en `storage1`
+
+| Ruta                    | Propósito                                  | Tipo de Acceso     |
+|-------------------------|--------------------------------------------|--------------------|
+| `/srv/nfs/postgresql`   | Volumen persistente para PostgreSQL vía NFS | RW (Read/Write)    |
+| `/srv/nfs/shared`       | Volumen compartido para pods                | RWX (ReadWriteMany)|
+| `/mnt/longhorn-disk`    | Disco para almacenamiento Longhorn          | RWO (ReadWriteOnce)|
+
+---
+
+## 🔧 Tecnologías Usadas
+
+- **LVM**: Para crear volúmenes lógicos escalables sobre `/dev/vdb`
+- **NFS Server**: Exporta volúmenes accesibles por otros nodos
+- **Longhorn**: Almacenamiento distribuido para Kubernetes
+
+---
+
+## ⚙️ Requisitos Previos
+
+- Nodo o VM con **Flatcar Linux**
+- Disco adicional (`/dev/vdb`) de **80 GB**
+- Acceso SSH con clave en `inventory/hosts.ini`
+- Ansible 2.14+ instalado en el nodo controlador
 
 ---
 
@@ -35,56 +63,77 @@ ansible-storage-cluster/
 ├── inventory/
 │   └── hosts.ini               # Inventario con IP del nodo storage1
 ├── roles/
-│   ├── lvm_setup/              # Tareas para preparar LVM
-│   ├── nfs_server/             # Instalación y configuración de NFS
-│   └── longhorn_node/          # Etiquetado del nodo para Longhorn
+│   ├── lvm_setup/              # Configura volúmenes LVM
+│   ├── nfs_server/             # Montaje y formateo de rutas NFS
+│   ├── nfs_config/             # Exportación y activación de NFS
+│   └── longhorn_node/          # Marca nodo como apto para Longhorn
 ├── site.yml                    # Playbook principal
+├── nfs_config.yml              # Playbook adicional: exportación NFS
 └── README.md                   # Este archivo
-```
-⚙️ Requisitos Previos
-Servidor o VM con Flatcar Linux
-
-Disco /dev/vdb vacío de 80 GB para almacenamiento
-
-Acceso SSH con clave privada configurada en inventory/hosts.ini
-
-Ansible 2.14+ instalado en el nodo controlador
-
 🚀 Ejecución
-Clona el repositorio:
-
-bash
-Copiar
-Editar
-git clone https://github.com/vhgalvez/ansible-storage-cluster.git
-cd ansible-storage-cluster
-Edita tu inventario:
-
-Verifica que inventory/hosts.ini tenga la IP correcta y el usuario adecuado para el nodo storage1.
-
-Ejecuta el playbook:
-
+1️⃣ Configurar almacenamiento (/dev/vdb)
 bash
 Copiar
 Editar
 sudo ansible-playbook -i inventory/hosts.ini site.yml
-📌 Resultado Esperado
-Una vez completado, el nodo storage1 tendrá:
+Esto configura LVM, crea puntos de montaje y prepara los volúmenes para NFS y Longhorn.
 
+2️⃣ Exportar rutas NFS y activar servicio
+bash
+Copiar
+Editar
+sudo ansible-playbook -i inventory/hosts.ini nfs_config.yml
+Esto asegura que /etc/exports esté correctamente configurado y que el servidor NFS esté activo.
+
+📌 Resultado Esperado
 Punto de Montaje	Tamaño	Uso
 /srv/nfs/postgresql	10 GB	Datos de PostgreSQL vía NFS
 /srv/nfs/shared	10 GB	Datos compartidos RWX en pods
 /mnt/longhorn-disk	60 GB	Volúmenes distribuidos Longhorn
-🧪 Uso en conjunto con Terraform
-Este Ansible está pensado para ejecutarse después de provisionar las VMs con el proyecto Terraform de red nat_network_03, que define el disco de 80 GB (/dev/vdb) en storage1.
+🧪 Verificación
+🔍 Comprobar volúmenes montados
+bash
+Copiar
+Editar
+df -h
+🔍 Ver exportaciones NFS
+bash
+Copiar
+Editar
+sudo exportfs -v
+Deberías ver:
+
+bash
+Copiar
+Editar
+/srv/nfs/postgresql  *(rw,sync,no_subtree_check,no_root_squash)
+/srv/nfs/shared      *(rw,sync,no_subtree_check,no_root_squash)
+🔍 Estado del servicio NFS
+bash
+Copiar
+Editar
+systemctl status nfs-server
+🧷 Montar NFS desde otro nodo (por ejemplo, postgresql1)
+bash
+Copiar
+Editar
+sudo mount -t nfs storage1.cefaslocalserver.com:/srv/nfs/postgresql /mnt
+🌟 Conclusión
+La arquitectura resultante:
+
+✅ Separa la carga de cómputo y el almacenamiento
+
+✅ Usa volúmenes tolerantes a fallos con Longhorn (3 réplicas)
+
+✅ Soporta PostgreSQL, Prometheus, Grafana, microservicios, etc.
+
+✅ Está lista para escalar horizontalmente y de forma segura
+
+Ideal para entornos educativos, laboratorios o preproducción realistas.
 
 ✍️ Autor
 vhgalvez
-🔗 GitHub | 🧠 Proyecto: FlatcarMicroCloud
+🔗 FlatcarMicroCloud
 
 🛡️ Licencia
-MIT License — Puedes usarlo libremente con fines educativos o personales.
-
-
-
-
+MIT License — Libre para uso educativo y personal.
