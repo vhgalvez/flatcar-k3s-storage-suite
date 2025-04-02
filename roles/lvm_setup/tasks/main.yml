@@ -1,6 +1,6 @@
 ---
 - name: Crear volumen físico en /dev/vdb
-  raw: pvcreate /dev/vdb
+  raw: pvcreate -ff -y /dev/vdb
   ignore_errors: false
 
 - name: Crear grupo de volúmenes vg_data
