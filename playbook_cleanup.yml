@@ -1,0 +1,39 @@
+---
+- name: 🔄 Resetear completamente almacenamiento en storage1
+  hosts: storage
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: 🚫 Desmontar volúmenes si están montados
+      raw: |
+        umount -f /srv/nfs/postgresql || true
+        umount -f /srv/nfs/shared || true
+        umount -f /mnt/longhorn-disk || true
+
+    - name: ❌ Eliminar volúmenes lógicos si existen
+      raw: |
+        for lv in postgresql_lv shared_lv longhorn_lv; do
+          lvremove -f /dev/vg_data/$lv || true
+        done
+
+    - name: ❌ Eliminar grupo de volúmenes si existe
+      raw: vgremove -f vg_data || true
+
+    - name: ❌ Eliminar firma LVM del disco /dev/vdb si es necesario
+      raw: |
+        wipefs -a /dev/vdb || true
+        dd if=/dev/zero of=/dev/vdb bs=1M count=10 || true
+        pvremove -ff -y /dev/vdb || true
+
+    - name: 🧹 Limpiar entradas de fstab
+      raw: |
+        sed -i '/\/srv\/nfs\/postgresql/d' /etc/fstab
+        sed -i '/\/srv\/nfs\/shared/d' /etc/fstab
+        sed -i '/\/mnt\/longhorn-disk/d' /etc/fstab
+
+    - name: 🧽 Eliminar directorios de montaje
+      raw: |
+        rm -rf /srv/nfs/postgresql
+        rm -rf /srv/nfs/shared
+        rm -rf /mnt/longhorn-disk
