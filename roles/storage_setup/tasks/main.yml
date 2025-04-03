@@ -2,8 +2,7 @@
 # roles/storage_setup/tasks/main.yml
 
 - name: 🛑 Detener servicio NFS si está activo
-  raw: |
-    systemctl stop nfs-server || true
+  raw: systemctl stop nfs-server || true
   ignore_errors: true
 
 - name: 💽 Desmontar y limpiar volúmenes antiguos si existen
@@ -24,25 +23,28 @@
 
 - name: ➕ Crear volumen lógico PostgreSQL
   raw: lvcreate -L 10G -n postgresql_lv vg_data
+  ignore_errors: false
 
 - name: ➕ Crear volumen lógico Shared
-  raw: lvcreate -L 10G -n shared_lv vg_data
+  raw: lvcreate -L 9G -n shared_lv vg_data
+  ignore_errors: false
 
-- name: ➕ Crear volumen lógico Longhorn (corrigiendo tamaño)
+- name: ➕ Crear volumen lógico Longhorn
   raw: lvcreate -L 58G -n longhorn_lv vg_data
+  ignore_errors: false
 
-- name: 🧱 Formatear volúmenes
+- name: 🧱 Formatear volúmenes si no tienen FS
   raw: |
-    mkfs.ext4 -F /dev/vg_data/postgresql_lv
-    mkfs.ext4 -F /dev/vg_data/shared_lv
-    mkfs.ext4 -F /dev/vg_data/longhorn_lv
+    blkid /dev/vg_data/postgresql_lv || mkfs.ext4 -F /dev/vg_data/postgresql_lv
+    blkid /dev/vg_data/shared_lv     || mkfs.ext4 -F /dev/vg_data/shared_lv
+    blkid /dev/vg_data/longhorn_lv   || mkfs.ext4 -F /dev/vg_data/longhorn_lv
 
 - name: 📁 Crear puntos de montaje y añadir a fstab
   raw: |
     mkdir -p /srv/nfs/postgresql /srv/nfs/shared /mnt/longhorn-disk
     grep -q '/srv/nfs/postgresql' /etc/fstab || echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
-    grep -q '/srv/nfs/shared'     /etc/fstab || echo '/dev/vg_data/shared_lv     /srv/nfs/shared     ext4 defaults 0 2' >> /etc/fstab
-    grep -q '/mnt/longhorn-disk' /etc/fstab || echo '/dev/vg_data/longhorn_lv   /mnt/longhorn-disk ext4 defaults 0 2' >> /etc/fstab
+    grep -q '/srv/nfs/shared' /etc/fstab || echo '/dev/vg_data/shared_lv /srv/nfs/shared ext4 defaults 0 2' >> /etc/fstab
+    grep -q '/mnt/longhorn-disk' /etc/fstab || echo '/dev/vg_data/longhorn_lv /mnt/longhorn-disk ext4 defaults 0 2' >> /etc/fstab
 
 - name: 🔄 Montar volúmenes
   raw: mount -a
@@ -55,7 +57,8 @@
 
 - name: 🛠️ Activar y arrancar servicio NFS
   raw: |
-    systemctl enable --now nfs-server || true
+    systemctl enable nfs-server || true
+    systemctl start nfs-server || true
 
 - name: 📤 Exportar rutas NFS
   raw: |
