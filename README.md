@@ -90,6 +90,12 @@ sudo ansible-playbook -i inventory/hosts.ini playbook_cleanup.yml
 
 ---
 
+## 📸 Ansible OK
+
+![Ansible OK](storage.png)
+
+---
+
 ## 🧪 Verificación
 
 ```bash
