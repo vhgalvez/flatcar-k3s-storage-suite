@@ -26,7 +26,7 @@
   raw: |
     lvcreate -L 10G -n postgresql_lv vg_data
     lvcreate -L 10G -n shared_lv vg_data
-    lvcreate -L 59G -n longhorn_lv vg_data  # corregido de 60G a 59G
+    lvcreate -L 59G -n longhorn_lv vg_data
 
 - name: 🧱 Formatear volúmenes con ext4
   raw: |
@@ -51,6 +51,17 @@
     chmod 0777 /srv/nfs/postgresql
     chmod 0777 /srv/nfs/shared
     chmod 0777 /mnt/longhorn-disk
+
+- name: 🛠️ Activar y arrancar servicio NFS
+  raw: |
+    systemctl enable nfs-server || true
+    systemctl start nfs-server || true
+
+- name: 📤 Exportar rutas NFS
+  raw: |
+    echo '/srv/nfs/postgresql *(rw,sync,no_subtree_check,no_root_squash)' > /etc/exports
+    echo '/srv/nfs/shared *(rw,sync,no_subtree_check,no_root_squash)' >> /etc/exports
+    exportfs -rv
 
 - name: 🏷️ Etiquetar nodo Longhorn (opcional)
   raw: |
