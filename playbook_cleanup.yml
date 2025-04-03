@@ -1,49 +1,66 @@
 ---
-- name: 🔄 Resetear completamente almacenamiento en storage1
-  hosts: storage
-  become: true
-  gather_facts: false
+# roles/storage_setup/tasks/main.yml
 
-  tasks:
-    - name: 🛑 Detener servicio NFS si está activo
-      raw: systemctl stop nfs-server || true
-      ignore_errors: true
+- name: 🛑 Detener servicio NFS si está activo
+  raw: systemctl stop nfs-server || true
+  ignore_errors: true
 
-    - name: 🚫 Desmontar volúmenes si están montados
-      raw: |
-        umount -f /srv/nfs/postgresql || true
-        umount -f /srv/nfs/shared || true
-        umount -f /mnt/longhorn-disk || true
+- name: 💽 Desmontar y limpiar volúmenes antiguos si existen
+  raw: |
+    umount -f /srv/nfs/postgresql || true
+    umount -f /srv/nfs/shared || true
+    umount -f /mnt/longhorn-disk || true
+    lvremove -fy /dev/vg_data/postgresql_lv || true
+    lvremove -fy /dev/vg_data/shared_lv || true
+    lvremove -fy /dev/vg_data/longhorn_lv || true
+    vgremove -fy vg_data || true
+    pvremove -ff -y /dev/vdb || true
 
-    - name: ❌ Eliminar volúmenes lógicos si existen
-      raw: |
-        for lv in postgresql_lv shared_lv longhorn_lv; do
-          lvremove -fy /dev/vg_data/$lv || true
-        done
+- name: ➕ Crear volumen físico y grupo de volúmenes
+  raw: |
+    pvcreate /dev/vdb
+    vgcreate vg_data /dev/vdb
 
-    - name: ❌ Desactivar grupo de volúmenes
-      raw: vgchange -an vg_data || true
+- name: ➕ Crear volúmenes lógicos (ajustados para evitar error)
+  raw: |
+    lvcreate -L 10G -n postgresql_lv vg_data
+    lvcreate -L 9G  -n shared_lv vg_data
+    lvcreate -L 58G -n longhorn_lv vg_data
 
-    - name: ❌ Eliminar grupo de volúmenes si existe
-      raw: vgremove -fy vg_data || true
+- name: 🧱 Formatear volúmenes si no tienen FS
+  raw: |
+    blkid /dev/vg_data/postgresql_lv || mkfs.ext4 -F /dev/vg_data/postgresql_lv
+    blkid /dev/vg_data/shared_lv     || mkfs.ext4 -F /dev/vg_data/shared_lv
+    blkid /dev/vg_data/longhorn_lv   || mkfs.ext4 -F /dev/vg_data/longhorn_lv
 
-    - name: ❌ Eliminar volumen físico si existe
-      raw: pvremove -ff -y /dev/vdb || true
+- name: 📁 Crear puntos de montaje y añadir a fstab
+  raw: |
+    mkdir -p /srv/nfs/postgresql /srv/nfs/shared /mnt/longhorn-disk
+    grep -q '/srv/nfs/postgresql' /etc/fstab || echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
+    grep -q '/srv/nfs/shared'     /etc/fstab || echo '/dev/vg_data/shared_lv     /srv/nfs/shared     ext4 defaults 0 2' >> /etc/fstab
+    grep -q '/mnt/longhorn-disk' /etc/fstab || echo '/dev/vg_data/longhorn_lv   /mnt/longhorn-disk ext4 defaults 0 2' >> /etc/fstab
 
-    - name: 💣 Eliminar firmas y limpiar bloques de inicio
-      raw: |
-        wipefs -a /dev/vdb || true
-        dd if=/dev/zero of=/dev/vdb bs=1M count=10 || true
-        partprobe || true
+- name: 🔄 Montar volúmenes
+  raw: mount -a
 
-    - name: 🧹 Limpiar entradas de fstab
-      raw: |
-        sed -i '/\/srv\/nfs\/postgresql/d' /etc/fstab
-        sed -i '/\/srv\/nfs\/shared/d' /etc/fstab
-        sed -i '/\/mnt\/longhorn-disk/d' /etc/fstab
+- name: 🧷 Asignar permisos a puntos de montaje
+  raw: |
+    chmod 0777 /srv/nfs/postgresql
+    chmod 0777 /srv/nfs/shared
+    chmod 0777 /mnt/longhorn-disk
 
-    - name: 🧽 Eliminar directorios de montaje
-      raw: |
-        rm -rf /srv/nfs/postgresql
-        rm -rf /srv/nfs/shared
-        rm -rf /mnt/longhorn-disk
+- name: 🛠️ Activar y arrancar servicio NFS
+  raw: |
+    systemctl enable nfs-server || true
+    systemctl start nfs-server || true
+
+- name: 📤 Exportar rutas NFS
+  raw: |
+    echo '/srv/nfs/postgresql *(rw,sync,no_subtree_check,no_root_squash)' > /etc/exports
+    echo '/srv/nfs/shared *(rw,sync,no_subtree_check,no_root_squash)' >> /etc/exports
+    exportfs -rv
+
+- name: 🏷️ Etiquetar nodo Longhorn (opcional)
+  raw: |
+    kubectl label node storage1.cefaslocalserver.com longhorn-node=true --overwrite || true
+  ignore_errors: true
