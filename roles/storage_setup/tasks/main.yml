@@ -1,11 +1,12 @@
 ---
+# roles/storage_setup/tasks/main.yml
 
 - name: 🛑 Detener servicios que puedan usar /dev/vdb
   raw: |
     systemctl stop nfs-server || true
   ignore_errors: true
 
-- name: 💽 Eliminar volúmenes antiguos
+- name: 💽 Eliminar volúmenes antiguos (si existen)
   raw: |
     umount -f /srv/nfs/postgresql || true
     umount -f /srv/nfs/shared || true
@@ -25,7 +26,7 @@
   raw: |
     lvcreate -L 10G -n postgresql_lv vg_data
     lvcreate -L 10G -n shared_lv vg_data
-    lvcreate -L 60G -n longhorn_lv vg_data
+    lvcreate -L 59G -n longhorn_lv vg_data  # corregido de 60G a 59G
 
 - name: 🧱 Formatear volúmenes con ext4
   raw: |
@@ -33,7 +34,7 @@
     mkfs.ext4 -F /dev/vg_data/shared_lv
     mkfs.ext4 -F /dev/vg_data/longhorn_lv
 
-- name: 📁 Crear puntos de montaje y fstab
+- name: 📁 Crear puntos de montaje y añadir a fstab
   raw: |
     mkdir -p /srv/nfs/postgresql
     mkdir -p /srv/nfs/shared
@@ -45,7 +46,7 @@
 - name: 🔄 Montar volúmenes
   raw: mount -a
 
-- name: 🧷 Asignar permisos
+- name: 🧷 Asignar permisos a puntos de montaje
   raw: |
     chmod 0777 /srv/nfs/postgresql
     chmod 0777 /srv/nfs/shared
