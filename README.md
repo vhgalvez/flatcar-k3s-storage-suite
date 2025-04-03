@@ -159,6 +159,10 @@ sudo mount -t nfs storage1.cefaslocalserver.com:/srv/nfs/postgresql /mnt
 
 ---
 
+## 📸 Ansible OK
+
+![Ansible OK](storage.png)
+
 ## ✍️ Autor
 
 [**vhgalvez**](https://github.com/vhgalvez)
@@ -170,3 +174,4 @@ sudo mount -t nfs storage1.cefaslocalserver.com:/srv/nfs/postgresql /mnt
 ## 🛡️ Licencia
 
 **MIT License** — Libre para uso educativo y personal.
+
