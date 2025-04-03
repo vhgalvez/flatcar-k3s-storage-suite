@@ -5,6 +5,10 @@
   gather_facts: false
 
   tasks:
+    - name: 🛑 Detener servicio NFS si está activo
+      raw: systemctl stop nfs-server || true
+      ignore_errors: true
+
     - name: 🚫 Desmontar volúmenes si están montados
       raw: |
         umount -f /srv/nfs/postgresql || true
@@ -14,17 +18,23 @@
     - name: ❌ Eliminar volúmenes lógicos si existen
       raw: |
         for lv in postgresql_lv shared_lv longhorn_lv; do
-          lvremove -f /dev/vg_data/$lv || true
+          lvremove -fy /dev/vg_data/$lv || true
         done
 
-    - name: ❌ Eliminar grupo de volúmenes si existe
-      raw: vgremove -f vg_data || true
+    - name: ❌ Desactivar grupo de volúmenes
+      raw: vgchange -an vg_data || true
 
-    - name: ❌ Eliminar firma LVM del disco /dev/vdb si es necesario
+    - name: ❌ Eliminar grupo de volúmenes si existe
+      raw: vgremove -fy vg_data || true
+
+    - name: ❌ Eliminar volumen físico si existe
+      raw: pvremove -ff -y /dev/vdb || true
+
+    - name: 💣 Eliminar firmas y limpiar bloques de inicio
       raw: |
         wipefs -a /dev/vdb || true
         dd if=/dev/zero of=/dev/vdb bs=1M count=10 || true
-        pvremove -ff -y /dev/vdb || true
+        partprobe || true
 
     - name: 🧹 Limpiar entradas de fstab
       raw: |
