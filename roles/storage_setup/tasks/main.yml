@@ -1,56 +1,57 @@
 ---
-- name: Desmontar volúmenes si están montados
+
+- name: 🛑 Detener servicios que puedan usar /dev/vdb
+  raw: |
+    systemctl stop nfs-server || true
+  ignore_errors: true
+
+- name: 💽 Eliminar volúmenes antiguos
   raw: |
     umount -f /srv/nfs/postgresql || true
     umount -f /srv/nfs/shared || true
     umount -f /mnt/longhorn-disk || true
-
-- name: Eliminar volúmenes lógicos si existen
-  raw: |
     lvremove -fy /dev/vg_data/postgresql_lv || true
     lvremove -fy /dev/vg_data/shared_lv || true
     lvremove -fy /dev/vg_data/longhorn_lv || true
-
-- name: Eliminar grupo de volúmenes si existe
-  raw: |
     vgremove -fy vg_data || true
-
-- name: Eliminar firma LVM del disco /dev/vdb si es necesario
-  raw: |
     pvremove -ff -y /dev/vdb || true
 
-- name: Crear volumen físico en /dev/vdb
-  raw: pvcreate /dev/vdb
+- name: ➕ Crear volumen físico y grupo de volúmenes
+  raw: |
+    pvcreate /dev/vdb
+    vgcreate vg_data /dev/vdb
 
-- name: Crear grupo de volúmenes vg_data
-  raw: vgcreate vg_data /dev/vdb
+- name: ➕ Crear volúmenes lógicos
+  raw: |
+    lvcreate -L 10G -n postgresql_lv vg_data
+    lvcreate -L 10G -n shared_lv vg_data
+    lvcreate -L 60G -n longhorn_lv vg_data
 
-- name: Crear volumen lógico para PostgreSQL
-  raw: lvcreate -L 10G -n postgresql_lv vg_data
-
-- name: Crear volumen lógico para datos compartidos
-  raw: lvcreate -L 10G -n shared_lv vg_data
-
-- name: Crear volumen lógico para Longhorn
-  raw: lvcreate -L 60G -n longhorn_lv vg_data
-
-- name: Formatear volúmenes con ext4
+- name: 🧱 Formatear volúmenes con ext4
   raw: |
     mkfs.ext4 -F /dev/vg_data/postgresql_lv
     mkfs.ext4 -F /dev/vg_data/shared_lv
     mkfs.ext4 -F /dev/vg_data/longhorn_lv
 
-- name: Crear puntos de montaje
+- name: 📁 Crear puntos de montaje y fstab
   raw: |
     mkdir -p /srv/nfs/postgresql
     mkdir -p /srv/nfs/shared
     mkdir -p /mnt/longhorn-disk
-
-- name: Añadir entradas en fstab si no existen
-  raw: |
     grep -q '/srv/nfs/postgresql' /etc/fstab || echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
     grep -q '/srv/nfs/shared'     /etc/fstab || echo '/dev/vg_data/shared_lv     /srv/nfs/shared     ext4 defaults 0 2' >> /etc/fstab
     grep -q '/mnt/longhorn-disk' /etc/fstab || echo '/dev/vg_data/longhorn_lv   /mnt/longhorn-disk ext4 defaults 0 2' >> /etc/fstab
 
-- name: Montar todos los volúmenes
+- name: 🔄 Montar volúmenes
   raw: mount -a
+
+- name: 🧷 Asignar permisos
+  raw: |
+    chmod 0777 /srv/nfs/postgresql
+    chmod 0777 /srv/nfs/shared
+    chmod 0777 /mnt/longhorn-disk
+
+- name: 🏷️ Etiquetar nodo Longhorn (opcional)
+  raw: |
+    kubectl label node storage1.cefaslocalserver.com longhorn-node=true --overwrite || true
+  ignore_errors: true

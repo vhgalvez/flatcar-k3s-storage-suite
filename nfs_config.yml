@@ -1,4 +1,5 @@
 ---
+
 - name: Configurar y exportar rutas NFS
   hosts: storage
   become: true

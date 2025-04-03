@@ -154,3 +154,24 @@ vhgalvez
 
 🛡️ Licencia
 MIT License — Libre para uso educativo y personal.
+
+
+
+📦 Tabla de Almacenamiento por VM – FlatcarMicroCloud
+Nodo	Rol	IP	Disco OS (GB)	Disco Adicional (GB)	Uso del Disco Adicional
+master1	Master Kubernetes	10.17.4.21	50	—	—
+master2	Master Kubernetes	10.17.4.22	50	—	—
+master3	Master Kubernetes	10.17.4.23	50	—	—
+worker1	Worker + Longhorn	10.17.4.24	20	40	Almacenamiento Longhorn (RWO)
+worker2	Worker + Longhorn	10.17.4.25	20	40	Almacenamiento Longhorn (RWO)
+worker3	Worker + Longhorn	10.17.4.26	20	40	Almacenamiento Longhorn (RWO)
+storage1	NFS + Longhorn Bkp	10.17.4.27	10	80	/srv/nfs/postgresql, /srv/nfs/shared, /mnt/longhorn-disk
+postgresql1	DB externa (futura)	—	—	—	Montará /srv/nfs/postgresql vía NFS
+load_balancers	HAProxy + Traefik	10.17.3.12-13	—	—	No requiere almacenamiento persistente
+freeipa1	DNS / Auth	10.17.3.11	—	—	Disco interno mínimo para OS
+pfSense	Firewall	192.168.0.200	—	—	No necesita discos adicionales
+📁 Detalle del Nodo de Almacenamiento storage1
+Ruta Montada	Tamaño (GB)	Propósito	Tipo de acceso
+/srv/nfs/postgresql	10	Datos de PostgreSQL vía NFS	RW
+/srv/nfs/shared	10	Datos compartidos entre pods (multi acceso)	RWX
+/mnt/longhorn-disk	60	Almacenamiento para respaldos de Longhorn	RWO

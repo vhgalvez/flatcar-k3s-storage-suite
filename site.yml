@@ -1,9 +1,8 @@
 ---
-- name: Configure Storage Node (Longhorn + NFS)
+
+- name: Configurar nodo de almacenamiento (almacenamiento local + etiquetas)
   hosts: storage
-  gather_facts: false
   become: true
+  gather_facts: false
   roles:
-    - lvm_setup
-    - nfs_server
-    - longhorn_node
+    - storage_setup
