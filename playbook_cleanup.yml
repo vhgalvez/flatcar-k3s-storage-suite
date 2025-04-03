@@ -1,54 +1,32 @@
 ---
-- name: 🔄 Resetear completamente almacenamiento en storage1
+- name: 🔄 Resetear almacenamiento en storage1
   hosts: storage
   become: true
   gather_facts: false
 
   tasks:
-
-    - name: 🛑 Detener servicio NFS si está activo
+    - name: 🛑 Detener servicio NFS
       raw: systemctl stop nfs-server || true
-      ignore_errors: true
 
-    - name: 💽 Desmontar volúmenes si están montados
+    - name: 💽 Limpiar almacenamiento
       raw: |
         umount -f /srv/nfs/postgresql || true
         umount -f /srv/nfs/shared || true
         umount -f /mnt/longhorn-disk || true
+        lvremove -fy /dev/vg_data/postgresql_lv || true
+        lvremove -fy /dev/vg_data/shared_lv || true
+        lvremove -fy /dev/vg_data/longhorn_lv || true
+        vgremove -fy vg_data || true
+        pvremove -ff -y /dev/vdb || true
+        wipefs -a /dev/vdb
+        dd if=/dev/zero of=/dev/vdb bs=1M count=10 || true
 
-    - name: ❌ Eliminar volúmenes lógicos si existen
-      raw: |
-        for lv in postgresql_lv shared_lv longhorn_lv; do
-          if lvdisplay /dev/vg_data/$lv >/dev/null 2>&1; then
-            lvremove -fy /dev/vg_data/$lv
-          fi
-        done
-
-    - name: ❌ Eliminar grupo de volúmenes si existe
-      raw: |
-        if vgdisplay vg_data >/dev/null 2>&1; then
-          vgremove -fy vg_data
-        fi
-
-    - name: ❌ Eliminar volumen físico si existe
-      raw: |
-        if pvs | grep -q '/dev/vdb'; then
-          pvremove -ff -y /dev/vdb
-        fi
-
-    - name: 🧽 Borrar firma de disco y sobrescribir primeros bloques
-      raw: |
-        wipefs -a /dev/vdb || true
-        dd if=/dev/zero of=/dev/vdb bs=1M count=10 oflag=direct status=none || true
-
-    - name: 🧹 Limpiar entradas de fstab
+    - name: 🧹 Limpiar entradas fstab
       raw: |
         sed -i '/\/srv\/nfs\/postgresql/d' /etc/fstab
         sed -i '/\/srv\/nfs\/shared/d' /etc/fstab
         sed -i '/\/mnt\/longhorn-disk/d' /etc/fstab
 
-    - name: 🧼 Eliminar directorios de montaje si existen
+    - name: 🧽 Eliminar puntos montaje
       raw: |
-        rm -rf /srv/nfs/postgresql
-        rm -rf /srv/nfs/shared
-        rm -rf /mnt/longhorn-disk
+        rm -rf /srv/nfs/postgresql /srv/nfs/shared /mnt/longhorn-disk
