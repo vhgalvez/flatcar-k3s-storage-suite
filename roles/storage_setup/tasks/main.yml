@@ -22,26 +22,24 @@
     pvcreate /dev/vdb
     vgcreate vg_data /dev/vdb
 
-- name: ➕ Crear volúmenes lógicos
+- name: ➕ Crear volúmenes lógicos con validación
   raw: |
-    lvcreate -L 10G -n postgresql_lv vg_data
-    lvcreate -L 10G -n shared_lv vg_data
-    lvcreate -L 59G -n longhorn_lv vg_data
+    lvcreate -L 10G -n postgresql_lv vg_data || true
+    lvcreate -L 10G -n shared_lv vg_data || true
+    lvcreate -L 59G -n longhorn_lv vg_data || true
 
 - name: 🧱 Formatear volúmenes con ext4
   raw: |
-    mkfs.ext4 -F /dev/vg_data/postgresql_lv
-    mkfs.ext4 -F /dev/vg_data/shared_lv
-    mkfs.ext4 -F /dev/vg_data/longhorn_lv
+    blkid /dev/vg_data/postgresql_lv || mkfs.ext4 -F /dev/vg_data/postgresql_lv
+    blkid /dev/vg_data/shared_lv || mkfs.ext4 -F /dev/vg_data/shared_lv
+    blkid /dev/vg_data/longhorn_lv || mkfs.ext4 -F /dev/vg_data/longhorn_lv
 
 - name: 📁 Crear puntos de montaje y añadir a fstab
   raw: |
-    mkdir -p /srv/nfs/postgresql
-    mkdir -p /srv/nfs/shared
-    mkdir -p /mnt/longhorn-disk
+    mkdir -p /srv/nfs/postgresql /srv/nfs/shared /mnt/longhorn-disk
     grep -q '/srv/nfs/postgresql' /etc/fstab || echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
-    grep -q '/srv/nfs/shared'     /etc/fstab || echo '/dev/vg_data/shared_lv     /srv/nfs/shared     ext4 defaults 0 2' >> /etc/fstab
-    grep -q '/mnt/longhorn-disk' /etc/fstab || echo '/dev/vg_data/longhorn_lv   /mnt/longhorn-disk ext4 defaults 0 2' >> /etc/fstab
+    grep -q '/srv/nfs/shared' /etc/fstab || echo '/dev/vg_data/shared_lv /srv/nfs/shared ext4 defaults 0 2' >> /etc/fstab
+    grep -q '/mnt/longhorn-disk' /etc/fstab || echo '/dev/vg_data/longhorn_lv /mnt/longhorn-disk ext4 defaults 0 2' >> /etc/fstab
 
 - name: 🔄 Montar volúmenes
   raw: mount -a
@@ -54,8 +52,7 @@
 
 - name: 🛠️ Activar y arrancar servicio NFS
   raw: |
-    systemctl enable nfs-server || true
-    systemctl start nfs-server || true
+    systemctl enable --now nfs-server || true
 
 - name: 📤 Exportar rutas NFS
   raw: |
