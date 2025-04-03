@@ -59,13 +59,13 @@ ansible-storage-cluster/
 ### 1️⃣ Opcional: Limpiar configuración anterior
 
 ```bash
-ansible-playbook -i inventory/hosts.ini playbook_cleanup.yml
+sudo ansible-playbook -i inventory/hosts.ini playbook_cleanup.yml
 ```
 
 ### 2️⃣ Configurar almacenamiento (`/dev/vdb`)
 
 ```bash
-ansible-playbook -i inventory/hosts.ini site.yml
+sudo ansible-playbook -i inventory/hosts.ini site.yml
 ```
 
 Esto:
