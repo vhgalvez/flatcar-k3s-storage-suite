@@ -27,6 +27,6 @@
         sed -i '/\/srv\/nfs\/shared/d' /etc/fstab
         sed -i '/\/mnt\/longhorn-disk/d' /etc/fstab
 
-    - name: 🧽 Eliminar puntos montaje
+    - name: 🧽 Eliminar puntos de montaje
       raw: |
         rm -rf /srv/nfs/postgresql /srv/nfs/shared /mnt/longhorn-disk
