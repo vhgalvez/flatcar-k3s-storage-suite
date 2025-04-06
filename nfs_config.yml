@@ -1,6 +1,5 @@
 ---
-
-- name: Configurar y exportar rutas NFS
+- name: Configurar exportaciones NFS
   hosts: storage
   become: true
   gather_facts: false
