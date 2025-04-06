@@ -117,3 +117,26 @@ ansible-playbook -i inventory/hosts.ini playbook_cleanup.yml
 ---
 
 🎯 Diseñado para funcionar con el clúster Kubernetes HA de `FlatcarMicroCloud`
+
+
+flatcar-k3s-storage-suite/
+├── inventory/
+│   └── hosts.ini
+│
+├── roles/
+│   ├── storage_setup/
+│   │   └── tasks/
+│   │       └── main.yml
+│   │
+│   ├── longhorn_worker/
+│   │   └── tasks/
+│   │       └── main.yml
+│   │
+│   └── nfs_config/
+│       └── tasks/
+│           └── main.yml
+│
+├── site.yml
+├── nfs_config.yml
+├── playbook_cleanup.yml
+└── README.md
