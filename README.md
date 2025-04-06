@@ -160,9 +160,6 @@ Taints: node-role.kubernetes.io/storage=true:NoSchedule
 | worker3        | Worker + Longhorn      | 10.17.4.26     | 20 GB    | 40 GB       | Almacenamiento Longhorn (RWO)                               |
 | storage1       | NFS + Longhorn Backup  | 10.17.4.27     | 10 GB    | 80 GB       | PostgreSQL, compartidos y respaldo de Longhorn              |
 | postgresql1    | DB Externa (futura)    | —              | —        | —           | Montará `/srv/nfs/postgresql` vía NFS                       |
-| load_balancers | HAProxy + Traefik      | 10.17.3.12-13  | —        | —           | No requiere almacenamiento persistente                      |
-| freeipa1       | DNS / Auth             | 10.17.3.11     | —        | —           | Disco interno mínimo                                        |
-| pfSense        | Firewall               | 192.168.0.200  | —        | —           | No requiere almacenamiento                                  |
 
 ---
 
