@@ -1,3 +1,4 @@
+# roles\longhorn_worker\tasks\main.yml
 ---
 - name: 🧽 Verificar si /mnt/longhorn-disk ya está montado (raw)
   raw: mount | grep /mnt/longhorn-disk || true
