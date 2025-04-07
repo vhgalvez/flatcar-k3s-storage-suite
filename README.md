@@ -176,3 +176,31 @@ Taints: node-role.kubernetes.io/storage=true:NoSchedule
 ## 🛡️ Licencia
 
 MIT License — Libre para uso educativo y personal.
+
+
+🚀 Paso a paso de ejecución (solo comandos)
+bash
+Copiar
+Editar
+# 1️⃣ Configurar almacenamiento en storage1 (crea LVM, formatea, monta y exporta NFS)
+sudo ansible-playbook -i inventory/hosts.ini site.yml
+bash
+Copiar
+Editar
+# 2️⃣ (Opcional) Reexportar rutas NFS sin tocar LVM ni discos
+sudo ansible-playbook -i inventory/hosts.ini playbooks/nfs_config.yml
+bash
+Copiar
+Editar
+# 3️⃣ Configurar discos en workers para Longhorn (formatea, monta, etiqueta)
+sudo ansible-playbook -i inventory/hosts.ini playbooks/longhorn_worker_disk_setup.yml
+bash
+Copiar
+Editar
+# 4️⃣ (Opcional) Etiquetar los workers como longhorn-node desde master1
+sudo ansible-playbook -i inventory/hosts.ini playbooks/label_longhorn_nodes_from_master.yml
+bash
+Copiar
+Editar
+# 5️⃣ (⚠️ Si necesitas limpiar toda la configuración del nodo storage1)
+sudo ansible-playbook -i inventory/hosts.ini playbooks/playbook_cleanup.yml
