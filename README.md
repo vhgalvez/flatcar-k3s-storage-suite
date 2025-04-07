@@ -61,30 +61,21 @@ Utiliza **LVM**, **NFS** y almacenamiento local en `/dev/vdb`.
 
 ```bash
 flatcar-k3s-storage-suite/
-├── inventory/
-│   ├── hosts.ini
-│
-├── playbooks/
-│   ├── site.yml                        # Orquestador principal
-│   ├── playbook_cleanup.yml           # Limpieza total del almacenamiento
-│   ├── longhorn_worker_disk_setup.yml        # ⬅️ Nuevo: Setup Longhorn en workers
-│   ├── label_longhorn_nodes_from_master.yml  # ⬅️ Nuevo: Etiquetado desde master1
-│   └── nfs_config.yml                 # Configuración de exportaciones NFS
-│
-├── roles/
+├── inventory/                    # ✅ Inventario Ansible
+│   └── hosts.ini
+├── playbooks/                   # ✅ Playbooks adicionales
+│   ├── label_longhorn_nodes_from_master.yml
+│   ├── longhorn_worker_disk_setup.yml
+│   ├── nfs_config.yml
+│   └── playbook_cleanup.yml
+├── roles/                       # ✅ Roles reutilizables
 │   ├── storage_setup/
-│   │   └── tasks/
-│   │       └── main.yml               # Setup LVM + NFS en nodo storage
-│   │
-│   ├── longhorn_worker/
-│   │   └── tasks/
-│   │       └── main.yml               # Lógica de disco + etiquetas para Longhorn
-│   │
-│   └── nfs_config/
-│       └── tasks/
-│           └── main.yml               # Exporta rutas NFS
-│
-└── README.md
+│   ├── nfs_config/
+│   └── longhorn_worker/
+├── site.yml                     # ✅ Orquestador principal (EN LA RAÍZ → PERFECTO)
+├── README.md
+└── storage.png
+
 ```
 
 ---
