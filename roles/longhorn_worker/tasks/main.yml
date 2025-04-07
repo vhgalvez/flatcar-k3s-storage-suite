@@ -1,12 +1,10 @@
-# roles/longhorn_worker/tasks/main.yml
 ---
-
-- name: 🧽 Verificar si /mnt/longhorn-disk ya está montado
-  shell: mount | grep /mnt/longhorn-disk || true
+- name: 🧽 Verificar si /mnt/longhorn-disk ya está montado (raw)
+  raw: mount | grep /mnt/longhorn-disk || true
   register: vdb_mount_check
   changed_when: false
 
-- name: 🧽 Formatear disco adicional (/dev/vdb) para Longhorn (si no está montado)
+- name: 🧽 Formatear disco adicional (/dev/vdb) para Longhorn (solo si no está montado)
   raw: mkfs.ext4 -F /dev/vdb
   when: vdb_mount_check.stdout == ""
 
