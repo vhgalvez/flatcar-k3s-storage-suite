@@ -1,3 +1,4 @@
+# roles\storage_setup\tasks\main.yml
 ---
 - name: 🛑 Detener servicio NFS si está activo
   raw: systemctl stop nfs-server || true

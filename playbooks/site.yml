@@ -1,3 +1,4 @@
+# playbooks\site.yml
 ---
 
 - name: Configurar nodo de almacenamiento (almacenamiento local + etiquetas)

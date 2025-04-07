@@ -1,3 +1,4 @@
+# roles\longhorn_worker\tasks\main.yml
 ---
 - name: 🧽 Formatear disco adicional (/dev/vdb) para Longhorn
   raw: mkfs.ext4 -F /dev/vdb

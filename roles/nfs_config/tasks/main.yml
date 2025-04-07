@@ -1,26 +1,13 @@
-roles\nfs_config\tasks\main.ym---
-- name: 📦 Instalar servidor NFS (si es necesario)
-  raw: |
-    if ! command -v exportfs &> /dev/null; then
-      dnf install -y nfs-utils || yum install -y nfs-utils
-    fi
-  ignore_errors: true
-
-- name: 🛠️ Habilitar y arrancar servicio NFS
-  raw: |
-    systemctl enable --now nfs-server || true
-
-- name: 📁 Asegurar directorios exportados
-  raw: |
-    mkdir -p /srv/nfs/postgresql /srv/nfs/shared /srv/nfs/traefik-token /srv/nfs/backups/etcd
-    chmod 0777 /srv/nfs/postgresql /srv/nfs/shared /srv/nfs/traefik-token /srv/nfs/backups/etcd
-
-- name: 📤 Configurar archivo /etc/exports
+# roles\nfs_config\tasks\main.yml
+---
+- name: 📤 Configurar archivo /etc/exports con rutas NFS
   raw: |
     echo '/srv/nfs/postgresql *(rw,sync,no_subtree_check,no_root_squash)' > /etc/exports
     echo '/srv/nfs/shared *(rw,sync,no_subtree_check,no_root_squash)' >> /etc/exports
-    echo '/srv/nfs/traefik-token *(rw,sync,no_subtree_check,no_root_squash)' >> /etc/exports
-    echo '/srv/nfs/backups/etcd *(rw,sync,no_subtree_check,no_root_squash)' >> /etc/exports
+    exportfs -rav
 
-- name: 🔄 Aplicar exportaciones NFS
-  raw: exportfs -rav
+- name: 🔁 Reiniciar exportaciones NFS
+  raw: exportfs -rv
+
+- name: 🛠️ Habilitar y arrancar el servicio NFS
+  raw: systemctl enable --now nfs-server || true

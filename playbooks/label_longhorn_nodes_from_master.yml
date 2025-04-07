@@ -1,3 +1,4 @@
+# Ruta: playbooks/label_longhorn_nodes_from_master.yml
 ---
 - name: 🏷️ Etiquetar nodos worker con longhorn-node=true desde master1
   hosts: master1
