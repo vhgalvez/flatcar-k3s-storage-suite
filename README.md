@@ -85,7 +85,6 @@ flatcar-k3s-storage-suite/
 │           └── main.yml               # Exporta rutas NFS
 │
 └── README.md
-
 ```
 
 ---
