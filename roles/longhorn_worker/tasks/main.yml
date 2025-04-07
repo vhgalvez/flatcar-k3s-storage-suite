@@ -1,0 +1,20 @@
+---
+- name: 🧽 Formatear disco adicional (/dev/vdb) para Longhorn
+  raw: mkfs.ext4 -F /dev/vdb
+
+- name: 📁 Crear punto de montaje para Longhorn
+  raw: mkdir -p /mnt/longhorn-disk
+
+- name: 📄 Añadir punto de montaje a /etc/fstab y montar volumen
+  raw: |
+    grep -q '/mnt/longhorn-disk' /etc/fstab || echo '/dev/vdb /mnt/longhorn-disk ext4 defaults 0 2' >> /etc/fstab
+    mount -a
+
+- name: 🛡️ Asignar permisos a la ruta /mnt/longhorn-disk
+  raw: chmod 0777 /mnt/longhorn-disk
+
+- name: 🏷️ Etiquetar nodo como longhorn-node
+  raw: |
+    nodename=$(hostname)
+    kubectl label node "$nodename" longhorn-node=true --overwrite || true
+  ignore_errors: true
