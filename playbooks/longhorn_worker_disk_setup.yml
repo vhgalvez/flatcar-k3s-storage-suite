@@ -1,0 +1,7 @@
+---
+- name: Configurar almacenamiento en workers para Longhorn
+  hosts: workers
+  become: true
+  gather_facts: false
+  roles:
+    - longhorn_worker

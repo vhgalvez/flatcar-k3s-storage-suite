@@ -1,8 +1,8 @@
 ---
 - name: 🏷️ Etiquetar nodos worker con longhorn-node=true desde master1
   hosts: master1
-  gather_facts: false
   become: true
+  gather_facts: false
 
   tasks:
     - name: 🏷️ worker1 - Etiqueta como longhorn-node

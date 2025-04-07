@@ -60,16 +60,32 @@ Utiliza **LVM**, **NFS** y almacenamiento local en `/dev/vdb`.
 ## 📂 Estructura del Proyecto
 
 ```bash
-ansible-storage-cluster/
+flatcar-k3s-storage-suite/
 ├── inventory/
-│   └── hosts.ini
+│   ├── hosts.ini
+│
+├── playbooks/
+│   ├── site.yml                        # Orquestador principal
+│   ├── playbook_cleanup.yml           # Limpieza total del almacenamiento
+│   ├── longhorn_worker_disk_setup.yml        # ⬅️ Nuevo: Setup Longhorn en workers
+│   ├── label_longhorn_nodes_from_master.yml  # ⬅️ Nuevo: Etiquetado desde master1
+│   └── nfs_config.yml                 # Configuración de exportaciones NFS
+│
 ├── roles/
-│   └── storage_setup/
+│   ├── storage_setup/
+│   │   └── tasks/
+│   │       └── main.yml               # Setup LVM + NFS en nodo storage
+│   │
+│   ├── longhorn_worker/
+│   │   └── tasks/
+│   │       └── main.yml               # Lógica de disco + etiquetas para Longhorn
+│   │
+│   └── nfs_config/
 │       └── tasks/
-│           └── main.yml
-├── site.yml
-├── playbook_cleanup.yml
+│           └── main.yml               # Exporta rutas NFS
+│
 └── README.md
+
 ```
 
 ---
