@@ -7,7 +7,7 @@
   vars:
     longhorn_namespace: longhorn-system
     longhorn_manifest_url: "https://raw.githubusercontent.com/longhorn/longhorn/v1.6.1/deploy/longhorn.yaml"
-    kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"  # adaptado al path típico en K3s (puede cambiar según tu configuración)
+    kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
     storage_class_patch: |
       {
         "metadata": {
@@ -18,24 +18,34 @@
       }
 
   tasks:
-    - name: Descargar manifiesto de Longhorn (solo una vez)
+    - name: Descargar manifiesto de Longhorn
       run_once: true
       delegate_to: localhost
       get_url:
         url: "{{ longhorn_manifest_url }}"
         dest: "/tmp/longhorn.yaml"
+        mode: '0644'
+        force: true
 
     - name: Aplicar manifiesto de Longhorn
       run_once: true
-      raw: |
-        kubectl apply -f /tmp/longhorn.yaml --kubeconfig={{ kubeconfig_path }}
+      raw: kubectl apply -f /tmp/longhorn.yaml --kubeconfig={{ kubeconfig_path }}
 
-    - name: Esperar que los pods de Longhorn estén listos
+    - name: Esperar a que el namespace de Longhorn exista
+      run_once: true
+      raw: |
+        kubectl get ns {{ longhorn_namespace }} --kubeconfig={{ kubeconfig_path }}
+      register: ns_check
+      retries: 10
+      delay: 5
+      until: ns_check.rc == 0
+
+    - name: Esperar a que todos los pods de Longhorn estén listos
       run_once: true
       raw: |
         kubectl wait --for=condition=Ready pods --all -n {{ longhorn_namespace }} --timeout=300s --kubeconfig={{ kubeconfig_path }}
 
-    - name: Parchear StorageClass de Longhorn como predeterminada
+    - name: Establecer Longhorn como StorageClass predeterminada
       run_once: true
       raw: |
         kubectl patch storageclass longhorn -p '{{ storage_class_patch }}' --type=merge --kubeconfig={{ kubeconfig_path }}
