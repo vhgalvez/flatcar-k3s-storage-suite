@@ -12,25 +12,25 @@
 
   tasks:
     - name: Verificar si el namespace ya existe
-      raw: kubectl --kubeconfig {{ kubeconfig_path }} get ns {{ longhorn_namespace }}
+      raw: sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} get ns {{ longhorn_namespace }}
       register: ns_check
       failed_when: false
       changed_when: false
 
     - name: Crear namespace para Longhorn si no existe
-      raw: kubectl --kubeconfig {{ kubeconfig_path }} create ns {{ longhorn_namespace }}
+      raw: sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} create ns {{ longhorn_namespace }}
       when: ns_check.rc != 0
 
     - name: Aplicar manifiesto de Longhorn
-      raw: kubectl --kubeconfig {{ kubeconfig_path }} apply -f {{ longhorn_manifest_url }}
+      raw: sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} apply -f {{ longhorn_manifest_url }}
       register: apply_longhorn
 
     - name: Esperar a que los pods de Longhorn estén listos
-      raw: kubectl --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} wait --for=condition=Ready pod --all --timeout=300s
+      raw: sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} wait --for=condition=Ready pod --all --timeout=300s
       register: wait_longhorn
 
     - name: Mostrar estado final de pods de Longhorn
-      raw: kubectl --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} get pods
+      raw: sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} get pods
       register: longhorn_pods
 
     - name: Mostrar pods
