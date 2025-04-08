@@ -1,7 +1,7 @@
 # playbooks\install_longhorn.yml
 ---
 - name: Instalar Longhorn en el clúster Kubernetes
-  hosts: master1  # o cambia al grupo que uses como master
+  hosts: masters
   become: true
   tasks:
     - name: Descargar manifiesto de Longhorn en localhost
