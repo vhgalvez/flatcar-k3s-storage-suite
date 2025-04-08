@@ -13,12 +13,6 @@
         dest: /tmp/longhorn.yaml
         mode: '0644'
 
-    - name: Copiar manifiesto a los nodos master (opcional, solo si quieres dejarlo en cada uno)
-      copy:
-        src: /tmp/longhorn.yaml
-        dest: /tmp/longhorn.yaml
-        mode: '0644'
-
     - name: Aplicar manifiesto de Longhorn desde localhost
       delegate_to: localhost
       command: kubectl apply -f /tmp/longhorn.yaml
