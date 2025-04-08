@@ -1,6 +1,6 @@
 ---
 - name: Instalar Longhorn en el clúster Kubernetes
-  hosts: master1
+  hosts: masters
   become: true
   gather_facts: false
 
