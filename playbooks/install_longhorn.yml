@@ -1,0 +1,44 @@
+---
+- name: Instalar Longhorn en el clúster Kubernetes
+  hosts: localhost
+  become: true
+  vars:
+    longhorn_namespace: longhorn-system
+    kubeconfig_path: "{{ lookup('env', 'K8S_AUTH_KUBECONFIG') | default('~/.kube/config', true) }}"
+  tasks:
+    - name: Asegurar que el repositorio de Helm de Longhorn está añadido
+      command: helm repo add longhorn https://charts.longhorn.io
+      register: helm_repo_result
+      failed_when: helm_repo_result.rc != 0 and "exists" not in helm_repo_result.stderr
+      changed_when: "'\"longhorn\" has been added' in helm_repo_result.stdout"
+
+    - name: Actualizar repositorios de Helm
+      command: helm repo update
+
+    - name: Crear el namespace longhorn-system si no existe
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        validate_certs: false
+        api_version: v1
+        kind: Namespace
+        name: "{{ longhorn_namespace }}"
+        state: present
+
+    - name: Instalar Longhorn vía Helm
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}"
+        validate_certs: false
+        name: longhorn
+        chart_ref: longhorn/longhorn
+        release_namespace: "{{ longhorn_namespace }}"
+        create_namespace: false
+
+    - name: Esperar a que todos los pods de Longhorn estén listos
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        kind: Pod
+        namespace: "{{ longhorn_namespace }}"
+      register: longhorn_pods
+      until: longhorn_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length == longhorn_pods.resources | length
+      retries: 30
+      delay: 10
