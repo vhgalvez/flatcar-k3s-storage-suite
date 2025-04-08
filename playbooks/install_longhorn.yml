@@ -1,19 +1,23 @@
 # playbooks\install_longhorn.yml
+---
 - name: Instalar Longhorn en el clúster Kubernetes
-  hosts: localhost
-  gather_facts: false
-
+  hosts: master1  # o cambia al grupo que uses como master
+  become: true
   tasks:
-    - name: Descargar manifiesto de Longhorn
+    - name: Descargar manifiesto de Longhorn en localhost
+      delegate_to: localhost
       get_url:
-        url: "{{ longhorn_manifest_url }}"
-        dest: "{{ longhorn_manifest_local }}"
+        url: https://raw.githubusercontent.com/longhorn/longhorn/v1.6.1/deploy/longhorn.yaml
+        dest: /tmp/longhorn.yaml
         mode: '0644'
 
-    - name: Copiar manifiesto a master1 y aplicar
-      delegate_to: 10.17.4.21
-      shell: |
-        cp {{ longhorn_manifest_local }} {{ longhorn_manifest_remote }}
-        kubectl apply -f {{ longhorn_manifest_remote }}
-      args:
-        executable: /bin/bash
+    - name: Copiar el manifiesto al nodo master
+      copy:
+        src: /tmp/longhorn.yaml
+        dest: /tmp/longhorn.yaml
+        mode: '0644'
+
+    - name: Aplicar manifiesto de Longhorn
+      command: kubectl apply -f /tmp/longhorn.yaml
+      environment:
+        KUBECONFIG: "{{ lookup('env', 'K8S_AUTH_KUBECONFIG') }}"
