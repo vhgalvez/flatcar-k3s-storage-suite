@@ -1,43 +1,25 @@
-# playbooks\install_longhorn.yml
 ---
 - name: Instalar Longhorn en el clúster Kubernetes
-  hosts: localhost
-  gather_facts: true
+  hosts: masters
+  become: true
   vars:
-    kubeconfig_path: "{{ ansible_env.HOME }}/.kube/config"
-
+    kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
   tasks:
+    - name: Instalar kubectl si no está presente
+      raw: |
+        which kubectl || curl -Lo /usr/local/bin/kubectl https://dl.k8s.io/release/$(curl -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x /usr/local/bin/kubectl
 
-    - name: Asegurar que el repositorio de Helm de Longhorn está añadido
-      command: helm repo add longhorn https://charts.longhorn.io
-      register: add_repo_result
-      failed_when: add_repo_result.rc != 0 and "exists" not in add_repo_result.stderr
-      changed_when: "'has been added' in add_repo_result.stdout"
+    - name: Aplicar manifiesto de Longhorn
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        kubectl apply -f https://raw.githubusercontent.com/longhorn/longhorn/v1.5.3/deploy/longhorn.yaml
 
-    - name: Actualizar repositorios de Helm
-      command: helm repo update
+    - name: Esperar a que los pods de Longhorn estén disponibles
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        kubectl -n longhorn-system wait --for=condition=Ready pods --all --timeout=300s
 
-    - name: Crear el namespace longhorn-system si no existe
-      kubernetes.core.k8s:
-        kubeconfig: "{{ kubeconfig_path }}"
-        validate_certs: false
-        state: present
-        definition:
-          apiVersion: v1
-          kind: Namespace
-          metadata:
-            name: longhorn-system
-
-    - name: Instalar Longhorn vía Helm
-      kubernetes.core.helm:
-        kubeconfig: "{{ kubeconfig_path }}"
-        validate_certs: false
-        name: longhorn
-        chart_ref: longhorn/longhorn
-        release_namespace: longhorn-system
-        create_namespace: false
-        wait: true
-        values:
-          persistence:
-            defaultClass: true
-            defaultClassReplicaCount: 3
+    - name: Verificar estado de los pods de Longhorn
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        kubectl get pods -n longhorn-system
