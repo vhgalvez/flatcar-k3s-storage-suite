@@ -4,6 +4,9 @@
   hosts: localhost
   gather_facts: false
 
+  vars:
+    kubeconfig_path: "/etc/traefik/traefik-kubeconfig.yaml"  # o el path real en tu sistema
+
   tasks:
     - name: Descargar manifiesto de Longhorn
       get_url:
@@ -14,4 +17,4 @@
     - name: Aplicar manifiesto de Longhorn al clúster
       command: kubectl apply --validate=false -f /tmp/longhorn.yaml
       environment:
-        KUBECONFIG: "{{ lookup('env', 'K8S_AUTH_KUBECONFIG') }}"
+        KUBECONFIG: "{{ kubeconfig_path }}"
