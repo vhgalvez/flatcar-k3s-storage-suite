@@ -6,32 +6,38 @@
   become: false
 
   vars:
+    master1_ip: "10.17.4.21"
     kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
     longhorn_namespace: "longhorn-system"
     longhorn_manifest_url: "https://raw.githubusercontent.com/longhorn/longhorn/v1.6.1/deploy/longhorn.yaml"
 
   tasks:
     - name: Verificar si el namespace ya existe
+      delegate_to: "{{ master1_ip }}"
       command: kubectl --kubeconfig {{ kubeconfig_path }} get ns {{ longhorn_namespace }}
       register: ns_check
       failed_when: false
       changed_when: false
 
     - name: Crear namespace para Longhorn si no existe
+      delegate_to: "{{ master1_ip }}"
       command: kubectl --kubeconfig {{ kubeconfig_path }} create ns {{ longhorn_namespace }}
       when: ns_check.rc != 0
 
     - name: Aplicar manifiesto de Longhorn
+      delegate_to: "{{ master1_ip }}"
       command: kubectl --kubeconfig {{ kubeconfig_path }} apply -f {{ longhorn_manifest_url }}
       register: apply_longhorn
 
     - name: Esperar a que los pods de Longhorn estén listos
+      delegate_to: "{{ master1_ip }}"
       shell: |
         kubectl --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} wait --for=condition=Ready pod --all --timeout=300s
       register: wait_longhorn
       changed_when: false
 
     - name: Mostrar estado final de pods de Longhorn
+      delegate_to: "{{ master1_ip }}"
       command: kubectl --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} get pods
       register: longhorn_pods
 
