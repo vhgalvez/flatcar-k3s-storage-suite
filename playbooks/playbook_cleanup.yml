@@ -1,4 +1,4 @@
-# playbooks\playbook_cleanup.yml
+# ruta: playbooks\playbook_cleanup.yml
 ---
 - name: 🔄 Resetear almacenamiento en storage1
   hosts: storage

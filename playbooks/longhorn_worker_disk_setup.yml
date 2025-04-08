@@ -1,4 +1,4 @@
-# playbooks/longhorn_worker_disk_setup.yml
+# ruta: playbooks/longhorn_worker_disk_setup.yml
 ---
 
 - name: Configurar almacenamiento en workers para Longhorn

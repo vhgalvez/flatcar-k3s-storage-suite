@@ -1,4 +1,4 @@
-# playbooks\install_longhorn.yml
+# ruta: playbooks\install_longhorn.yml
 ---
 - name: Instalar Longhorn en el clúster Kubernetes (RAW)
   hosts: masters[0]
