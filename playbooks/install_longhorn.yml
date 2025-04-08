@@ -1,25 +1,45 @@
 ---
 - name: Instalar Longhorn en el clúster Kubernetes
-  hosts: masters
+  hosts: master1
   become: true
+  gather_facts: false
+
   vars:
-    kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
+    longhorn_namespace: longhorn-system
+    longhorn_manifest_url: "https://raw.githubusercontent.com/longhorn/longhorn/v1.6.1/deploy/longhorn.yaml"
+    kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"  # adaptado al path típico en K3s (puede cambiar según tu configuración)
+    storage_class_patch: |
+      {
+        "metadata": {
+          "annotations": {
+            "storageclass.kubernetes.io/is-default-class": "true"
+          }
+        }
+      }
+
   tasks:
-    - name: Instalar kubectl si no está presente
-      raw: |
-        which kubectl || curl -Lo /usr/local/bin/kubectl https://dl.k8s.io/release/$(curl -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x /usr/local/bin/kubectl
+    - name: Descargar manifiesto de Longhorn (solo una vez)
+      run_once: true
+      delegate_to: localhost
+      get_url:
+        url: "{{ longhorn_manifest_url }}"
+        dest: "/tmp/longhorn.yaml"
 
     - name: Aplicar manifiesto de Longhorn
+      run_once: true
       raw: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        kubectl apply -f https://raw.githubusercontent.com/longhorn/longhorn/v1.5.3/deploy/longhorn.yaml
+        kubectl apply -f /tmp/longhorn.yaml --kubeconfig={{ kubeconfig_path }}
 
-    - name: Esperar a que los pods de Longhorn estén disponibles
+    - name: Esperar que los pods de Longhorn estén listos
+      run_once: true
       raw: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        kubectl -n longhorn-system wait --for=condition=Ready pods --all --timeout=300s
+        kubectl wait --for=condition=Ready pods --all -n {{ longhorn_namespace }} --timeout=300s --kubeconfig={{ kubeconfig_path }}
 
-    - name: Verificar estado de los pods de Longhorn
+    - name: Parchear StorageClass de Longhorn como predeterminada
+      run_once: true
       raw: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        kubectl get pods -n longhorn-system
+        kubectl patch storageclass longhorn -p '{{ storage_class_patch }}' --type=merge --kubeconfig={{ kubeconfig_path }}
+
+    - name: Mostrar mensaje final
+      debug:
+        msg: "✅ Longhorn instalado correctamente en el namespace '{{ longhorn_namespace }}' y configurado como StorageClass predeterminada."
