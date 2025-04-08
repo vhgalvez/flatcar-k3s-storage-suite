@@ -2,7 +2,9 @@
 ---
 - name: Instalar Longhorn en el clúster Kubernetes
   hosts: masters
-  become: true
+  become: false
+  gather_facts: false
+
   tasks:
     - name: Descargar manifiesto de Longhorn en localhost
       delegate_to: localhost
@@ -11,13 +13,14 @@
         dest: /tmp/longhorn.yaml
         mode: '0644'
 
-    - name: Copiar el manifiesto al nodo master
+    - name: Copiar manifiesto a los nodos master (opcional, solo si quieres dejarlo en cada uno)
       copy:
         src: /tmp/longhorn.yaml
         dest: /tmp/longhorn.yaml
         mode: '0644'
 
-    - name: Aplicar manifiesto de Longhorn
+    - name: Aplicar manifiesto de Longhorn desde localhost
+      delegate_to: localhost
       command: kubectl apply -f /tmp/longhorn.yaml
       environment:
         KUBECONFIG: "{{ lookup('env', 'K8S_AUTH_KUBECONFIG') }}"
