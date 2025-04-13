@@ -1,46 +1,48 @@
 ---
 # playbook_cleanup.yml
-# Playbook para revertir la configuración de almacenamiento en storage1 (u otros nodos si es necesario).
-# Incluye protección para evitar ejecuciones accidentales mediante confirmación explícita.
+# 🔁 Playbook para revertir la configuración de almacenamiento en nodos como storage1.
+# ⚠️ Incluye verificación de confirmación para evitar ejecuciones accidentales.
 
-- hosts: storage
+- name: ♻️ Limpiar configuración de almacenamiento (solo /dev/vdb)
+  hosts: storage
   become: true
   gather_facts: yes
 
   pre_tasks:
-    - name: Verificación de confirmación de limpieza
+    - name: ✅ Verificación de confirmación de limpieza
       ansible.builtin.assert:
         that:
           - confirm_cleanup | default(false) | bool
         fail_msg: "❌ ERROR: Debe confirmar la limpieza con -e 'confirm_cleanup=yes'"
-        success_msg: "✅ Confirmación recibida. Iniciando limpieza del nodo {{ inventory_hostname }}..."
+        success_msg: "🧹 Confirmación recibida. Iniciando limpieza del nodo {{ inventory_hostname }}..."
 
   tasks:
-  - name: Verificar que el disco a limpiar sea /dev/vdb
-    ansible.builtin.assert:
-      that:
-        - "'/dev/vdb' in item"
-      fail_msg: "⚠️ ERROR: Solo se permite limpiar /dev/vdb. Revisa el disco objetivo."
-    loop:
-      - /dev/vdb1
-      
-    - name: Detener servicio NFS (si está presente)
+
+    - name: 🔐 Verificar que el disco a limpiar sea /dev/vdb
+      ansible.builtin.assert:
+        that:
+          - "'/dev/vdb1' in item"
+        fail_msg: "⚠️ ERROR: Solo se permite limpiar /dev/vdb. Revisa el disco objetivo."
+      loop:
+        - /dev/vdb1
+
+    - name: 🛑 Detener servicio NFS (si está presente)
       ansible.builtin.service:
         name: nfs-server
         state: stopped
         enabled: no
-      ignore_errors: yes
+      ignore_errors: true
 
-    - name: Desmontar volúmenes montados
+    - name: 🔌 Desmontar volúmenes montados
       ansible.posix.umount:
         name: "{{ item }}"
       loop:
         - /srv/nfs/postgresql
         - /srv/nfs/shared
         - /mnt/longhorn-disk
-      ignore_errors: yes
+      ignore_errors: true
 
-    - name: Eliminar volúmenes lógicos
+    - name: 🗑️ Eliminar volúmenes lógicos
       community.general.lvol:
         vg: vg_storage
         lv: "{{ item }}"
@@ -49,28 +51,28 @@
         - postgres_lv
         - shared_lv
         - longhorn_lv
-      ignore_errors: yes
+      ignore_errors: true
 
-    - name: Eliminar grupo de volúmenes
+    - name: 🧨 Eliminar grupo de volúmenes
       community.general.lvg:
         vg: vg_storage
         state: absent
-      ignore_errors: yes
+      ignore_errors: true
 
-    - name: Borrar firma LVM del disco
+    - name: 💣 Borrar firma LVM del disco (/dev/vdb1)
       ansible.builtin.command: pvremove -y /dev/vdb1
       register: pvremove_result
       changed_when: "'wiped' in pvremove_result.stdout or 'successfully' in pvremove_result.stdout"
       failed_when: false
-      ignore_errors: yes
+      ignore_errors: true
 
-    - name: Borrar tabla de partición de /dev/vdb
+    - name: 🚫 Borrar tabla de partición de /dev/vdb
       community.general.parted:
         device: /dev/vdb
         state: absent
         number: 1
-      ignore_errors: yes
+      ignore_errors: true
 
-    - name: Mostrar mensaje final (opcional)
+    - name: ✅ Mostrar mensaje final (opcional)
       ansible.builtin.debug:
         msg: "✅ Limpieza completada en {{ inventory_hostname }}. Reinicie el nodo si es necesario."
