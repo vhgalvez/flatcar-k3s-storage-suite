@@ -1,0 +1,31 @@
+# playbooks/nfs_config.yml
+---
+- name: 📤 Configurar exportaciones NFS en el nodo de almacenamiento
+  hosts: storage
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: 📦 Instalar servicios NFS
+      raw: |
+        sudo mkdir -p /var/lib/setup-logs
+        sudo dnf install -y nfs-utils || sudo apt install -y nfs-kernel-server
+
+    - name: 🔧 Crear archivo /etc/exports con las rutas compartidas
+      raw: |
+        echo '/srv/nfs/postgresql *(rw,sync,no_subtree_check,no_root_squash)' | sudo tee /etc/exports.d/postgresql.exports
+        echo '/srv/nfs/shared *(rw,sync,no_subtree_check,no_root_squash)' | sudo tee /etc/exports.d/shared.exports
+
+    - name: 🚀 Habilitar y arrancar servicios NFS
+      raw: |
+        sudo systemctl enable --now nfs-server
+        sudo exportfs -a
+        sudo systemctl restart nfs-server
+
+    - name: ✅ Verificar exportaciones NFS activas
+      raw: exportfs -v
+      register: exportfs_output
+
+    - name: 🧾 Mostrar resultado de exportaciones NFS
+      debug:
+        var: exportfs_output.stdout_lines
