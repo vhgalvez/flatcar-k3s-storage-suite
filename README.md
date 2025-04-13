@@ -41,67 +41,53 @@ Confirme que los nodos estén correctamente agrupados:
 ```bash
 sudo ansible-playbook -i inventory/hosts.ini site.yml
 ```
+
 Este playbook ejecuta:
-- **Detección y validación de discos**: Solo se utiliza `/dev/vdb` si está completamente libre.
-- **Particionado y creación de LVM**: Se crean volúmenes lógicos para PostgreSQL, compartidos y Longhorn.
-- **Formateo y montaje**: Se usan sistemas de archivos `ext4` y se montan en directorios adecuados.
-- **Instalación de NFS**: Se instala `nfs-server` y se configura `/etc/exports` con las rutas compartidas.
-- **Habilitación del servicio**: Se habilita y arranca el servicio NFS automáticamente.
+- **Detección y validación de discos**
+- **Particionado y creación de LVM**
+- **Formateo y montaje**
+- **Instalación de NFS**
+- **Habilitación del servicio**
 
 ### 4. Validar configuración de discos montados
-En `storage1`, ejecute:
 ```bash
 df -h
 ```
-Verifique que aparecen montados:
+
+Verifique:
 - `/srv/nfs/postgresql`
 - `/srv/nfs/shared`
 - `/mnt/longhorn-disk`
-
-Desde Longhorn, compruebe que los nodos usan `/mnt/longhorn-disk` como almacenamiento.
 
 ---
 
 ## 📘 Tareas y su descripción
 
 ### 🧱 `storage_setup` (rol)
-1. **Detección segura del disco**: Verifica que `/dev/vdb` exista y esté sin uso. Evita accidentalmente tocar discos críticos.
-2. **Particionado y LVM**: Crea una partición primaria, grupo de volúmenes (`vg_storage`), y tres volúmenes lógicos.
-3. **Formateo y montaje**: Usa `ext4` para los volúmenes y los monta en las rutas configuradas.
-4. **Exportación NFS**: Crea `exports` para PostgreSQL y datos compartidos, arranca `nfs-server`.
-5. **Reutilizable**: Si el disco ya está formateado, las tareas se saltan para evitar sobrescritura.
+- Verificación segura de `/dev/vdb`
+- Particionado y creación de VG + LVs
+- Montaje y formateo
+- Exportación NFS
 
 ### 💾 `longhorn_worker` (rol)
-1. **Verificación del disco**: Comprueba que `/dev/vdb` no tenga particiones, FS ni montajes.
-2. **Formateo y montaje**: Si está libre, se formatea y monta en `/mnt/longhorn-disk`.
-3. **Seguro**: Si el disco ya tiene uso, no se hace nada.
+- Verificación segura de `/dev/vdb`
+- Formateo + montaje en `/mnt/longhorn-disk`
 
-### 🚀 `install_longhorn.yml` (playbook)
-1. **Etiquetado de nodos**: Etiqueta nodos `worker` con `longhorn-node=true`.
-2. **Instalación Longhorn**: Crea el namespace, descarga y aplica el manifiesto oficial.
-3. **Espera por pods**: Valida que los pods estén `Ready`.
-4. **Resumen final**: Muestra estado de los pods Longhorn.
+### 🚀 `install_longhorn.yml`
+- Etiquetado de nodos
+- Instala Longhorn
+- Espera readiness de pods
 
-### 🧹 `playbook_cleanup.yml` (playbook opcional)
-1. **Verificación de seguridad**: Requiere `-e confirm_cleanup=yes` para ejecutarse.
-2. **Detiene NFS**: Apaga el servicio si está corriendo.
-3. **Desmontaje de volúmenes**: Libera rutas montadas.
-4. **Elimina LVM y particiones**: Borra volúmenes, VG, particiones y firma LVM.
-5. **No afecta VMs**: Seguro para reprovisionar nodos sin borrar la máquina virtual.
+### 🧹 `playbook_cleanup.yml`
+- Confirmación obligatoria con `confirm_cleanup=yes`
+- Detiene NFS
+- Desmonta volúmenes
+- Borra LVM y particiones
+- Seguro para reprovisionar nodos
 
 ---
 
 ## 🧩 Estado de Discos
-
-### 🔧 Nodo worker1
-- `vda`: 20G (SO, montado en `/`)
-- `vdb`: 40G (libre, sin formatear)
-
-### 🗃️ Nodo storage1
-- `vda`: 10G (SO, montado en `/`)
-- `vdb`: 80G (libre, sin uso, listo para NFS o LVM)
-
-### ✅ Resumen Final
 
 | Nodo      | Disco SO (vda) | Uso Sistema | Disco Adicional (vdb) | Estado Disco |
 |-----------|----------------|-------------|------------------------|---------------|
@@ -110,21 +96,30 @@ Desde Longhorn, compruebe que los nodos usan `/mnt/longhorn-disk` como almacenam
 
 ---
 
-## 🧹 Limpieza del nodo de almacenamiento (opcional)
+## 🧹 Limpieza del almacenamiento en nodos (opcional)
 
-Si necesitas reiniciar desde cero el nodo `storage` (por ejemplo, para reprovisionarlo sin destruir la VM), puedes ejecutar:
+Si necesitas **reiniciar desde cero** los discos de los nodos de almacenamiento (`storage`) o de los `workers` que usan `/dev/vdb` para Longhorn, puedes utilizar el siguiente playbook de limpieza:
 
+### ▶️ Ejecución real:
 ```bash
-sudo ansible-playbook playbooks/playbook_cleanup.yml -e confirm_cleanup=yes
+sudo ansible-playbook playbooks/playbook_cleanup.yml -i inventory/hosts.ini -e "confirm_cleanup=yes"
 ```
 
-Este playbook:
-- Desmonta volúmenes
-- Elimina LVM (vg y lvs)
-- Borra la partición y firma de LVM de `/dev/vdb`
-- Detiene el servicio NFS
+### 🔍 Ejecución en modo verificación (no realiza cambios):
+```bash
+sudo ansible-playbook playbooks/playbook_cleanup.yml -i inventory/hosts.ini --check -e "confirm_cleanup=yes"
+```
 
-⚠️ **Usar solo si sabes lo que estás haciendo. No borra VMs.**
+> Este playbook **no se ejecutará** sin la confirmación explícita `confirm_cleanup=yes`.
+
+### ✅ ¿Qué hace este playbook?
+- Desmonta los volúmenes en `/srv/nfs/*` y `/mnt/longhorn-disk`
+- Borra los volúmenes lógicos (LVM) y el grupo de volúmenes en el nodo `storage`
+- Limpia la partición y la firma LVM del disco `/dev/vdb1` en `storage`
+- Ejecuta `wipefs` sobre `/dev/vdb` en nodos `workers`
+- Detiene y deshabilita el servicio `nfs-server` en `storage`
+
+> ⚠️ **Este playbook no elimina máquinas virtuales ni destruye configuraciones fuera del disco `/dev/vdb`.**
 
 ---
 
