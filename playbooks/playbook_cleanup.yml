@@ -17,7 +17,7 @@
         success_msg: "🧹 Confirmación recibida. Iniciando limpieza del nodo {{ inventory_hostname }}..."
 
   tasks:
-    - name: 🔌 Desmontar volúmenes montados (raw)
+    - name: 🔌 Desmontar volúmenes montados
       ansible.builtin.raw: |
         umount -f /srv/nfs/postgresql 2>/dev/null || true
         umount -f /srv/nfs/shared 2>/dev/null || true
@@ -34,22 +34,19 @@
       ignore_errors: true
 
     - name: 🗑️ Eliminar volúmenes lógicos (solo en storage)
-      community.general.lvol:
-        vg: vg_storage
-        lv: "{{ item }}"
-        state: absent
-      loop:
-        - postgres_lv
-        - shared_lv
-        - longhorn_lv
+      ansible.builtin.raw: |
+        lvremove -y /dev/vg_storage/postgres_lv || true
+        lvremove -y /dev/vg_storage/shared_lv || true
+        lvremove -y /dev/vg_storage/longhorn_lv || true
       when: "'storage' in group_names"
+      changed_when: false
       ignore_errors: true
 
     - name: 🧨 Eliminar grupo de volúmenes (solo en storage)
-      community.general.lvg:
-        vg: vg_storage
-        state: absent
+      ansible.builtin.raw: |
+        vgremove -y vg_storage || true
       when: "'storage' in group_names"
+      changed_when: false
       ignore_errors: true
 
     - name: 💣 Borrar firma LVM del disco /dev/vdb1 (solo en storage)
@@ -60,11 +57,10 @@
       ignore_errors: true
 
     - name: 🚫 Borrar tabla de partición /dev/vdb (solo en storage)
-      community.general.parted:
-        device: /dev/vdb
-        state: absent
-        number: 1
+      ansible.builtin.raw: |
+        parted /dev/vdb rm 1 || true
       when: "'storage' in group_names"
+      changed_when: false
       ignore_errors: true
 
     - name: 🧹 Borrar sistema de archivos en /dev/vdb (solo en workers)
