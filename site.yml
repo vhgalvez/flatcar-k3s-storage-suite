@@ -1,15 +1,44 @@
----
 # site.yml
-# Playbook principal para configurar almacenamiento con LVM, NFS y Longhorn
+# 🧩 Playbook maestro para configurar el almacenamiento completo del clúster K3s con Flatcar
+# Roles: LVM, NFS, Longhorn y etiquetado de nodos
 
-- hosts: storage
+- name: 📦 Preparar disco de almacenamiento con LVM
+  hosts: storage
   become: yes
   gather_facts: yes
   roles:
     - role: storage_setup
 
-- hosts: longhorn_nodes
+- name: 🔁 Configurar y exportar NFS
+  hosts: storage
+  become: yes
+  gather_facts: false
+  roles:
+    - role: nfs_config
+
+- name: 💾 Preparar nodos Longhorn (formatear y montar /dev/vdb)
+  hosts: workers
   become: yes
   gather_facts: yes
   roles:
     - role: longhorn_worker
+
+- name: 🏷️ Etiquetar nodos Longhorn desde el master1
+  hosts: master1
+  become: yes
+  gather_facts: false
+  tasks:
+    - name: 🏷️ Etiquetar worker1
+      raw: |
+        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+        k3s kubectl label node worker1.cefaslocalserver.com longhorn-node=true --overwrite
+
+    - name: 🏷️ Etiquetar worker2
+      raw: |
+        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+        k3s kubectl label node worker2.cefaslocalserver.com longhorn-node=true --overwrite
+
+    - name: 🏷️ Etiquetar worker3
+      raw: |
+        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+        k3s kubectl label node worker3.cefaslocalserver.com longhorn-node=true --overwrite

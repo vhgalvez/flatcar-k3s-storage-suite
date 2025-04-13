@@ -1,8 +1,6 @@
----
 # roles/storage_setup/tasks/main.yml
 # Este rol prepara el disco de datos adicional (p. ej. /dev/vdb) en nodos de almacenamiento.
-# Incluye creación de LVM y sistemas de archivos para PostgreSQL, datos compartidos y Longhorn.
-# Se implementaron verificaciones para no formatear discos del sistema ni ya montados.
+# Incluye creación de LVM, sistemas de archivos, configuración NFS y montaje.
 
 - name: Verificar presencia de disco de datos
   ansible.builtin.stat:
@@ -142,3 +140,23 @@
     fstype: ext4
     state: mounted
   when: storage_disk is defined
+
+- name: Instalar servidor NFS (solo si no está instalado)
+  ansible.builtin.raw: |
+    which exportfs >/dev/null 2>&1 || \
+    (sudo apk add nfs-utils || sudo yum install -y nfs-utils || sudo apt-get install -y nfs-kernel-server)
+  changed_when: false
+
+- name: Configurar exportaciones NFS
+  ansible.builtin.copy:
+    dest: /etc/exports
+    content: |
+      /srv/nfs/postgresql *(rw,sync,no_subtree_check,no_root_squash)
+      /srv/nfs/shared *(rw,sync,no_subtree_check,no_root_squash)
+    mode: '0644'
+
+- name: Habilitar y arrancar servicio NFS
+  ansible.builtin.raw: |
+    (sudo systemctl enable nfs-server && sudo systemctl restart nfs-server) || \
+    (sudo rc-service nfs restart)
+  changed_when: false

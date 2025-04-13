@@ -99,3 +99,57 @@ Este playbook desmontará los volúmenes, eliminará los LVs, el VG, y la partic
 Este conjunto de playbooks garantiza una configuración de almacenamiento automatizada y segura para su clúster Kubernetes con Flatcar. Gracias a las validaciones y protecciones incluidas, puede trabajar con confianza evitando daños accidentales al sistema operativo o pérdida de datos.
 
 > **Repositorio del proyecto:** [`flatcar-k3s-storage-suite`](https://github.com/tu_usuario/flatcar-k3s-storage-suite)
+
+
+🔧 Nodo worker1
+📦 Discos:
+bash
+Copiar
+Editar
+vda  -> 20G (Disco del sistema operativo)
+vdb  -> 40G (Disco adicional)
+📂 Sistema operativo (montado en /dev/vda9):
+/: 17G (montado en vda9)
+
+Espacio usado: 2.4G
+
+Espacio libre: 14G
+
+📊 Uso total de disco (SO):
+Total ocupado por el sistema (aproximadamente): 2.4G en raíz + mínimo uso en /usr y /oem
+
+Total ocupado ≈ 2.5 GB
+
+💾 Disco adicional (vdb):
+Tamaño: 40 GB
+
+No está montado ni usado (aún disponible para LVM, Longhorn, NFS, etc.)
+
+🗃️ Nodo storage1
+📦 Discos:
+bash
+Copiar
+Editar
+vda  -> 10G (Disco del sistema operativo)
+vdb  -> 80G (Disco adicional)
+📂 Sistema operativo (montado en /dev/vda9):
+/: 7.2G
+
+Espacio usado: 2.4G
+
+Espacio libre: 4.5G
+
+📊 Uso total de disco (SO):
+Total ocupado por el sistema (aproximadamente): 2.4 GB + mínimo uso en /usr y /oem
+
+Total ocupado ≈ 2.5 GB
+
+💾 Disco adicional (vdb):
+Tamaño: 80 GB
+
+No está montado ni usado (puedes usarlo para NFS, backups, etc.)
+
+✅ Resumen Final
+Nodo	Disco SO (vda)	Uso Sistema	Disco Adicional (vdb)	Estado Disco Adicional
+worker1	20 GB	~2.5 GB	40 GB	Libre
+storage1	10 GB	~2.5 GB	80 GB	Libre
