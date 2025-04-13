@@ -36,27 +36,27 @@
   changed_when: false
 
 - name: Crear volumen lógico para PostgreSQL
-  raw: lvcreate -L 20G -n postgres_lv vg_storage
+  raw: lvcreate -y -L 20G -n postgres_lv vg_storage
   changed_when: false
 
 - name: Crear volumen lógico para datos compartidos
-  raw: lvcreate -L 20G -n shared_lv vg_storage
+  raw: lvcreate -y -L 20G -n shared_lv vg_storage
   changed_when: false
 
 - name: Crear volumen lógico para Longhorn (resto)
-  raw: lvcreate -l 100%FREE -n longhorn_lv vg_storage
+  raw: lvcreate -y -l 100%FREE -n longhorn_lv vg_storage
   changed_when: false
 
 - name: Formatear postgres_lv
-  raw: mkfs.ext4 /dev/vg_storage/postgres_lv
+  raw: mkfs.ext4 -F /dev/vg_storage/postgres_lv
   changed_when: false
 
 - name: Formatear shared_lv
-  raw: mkfs.ext4 /dev/vg_storage/shared_lv
+  raw: mkfs.ext4 -F /dev/vg_storage/shared_lv
   changed_when: false
 
 - name: Formatear longhorn_lv
-  raw: mkfs.ext4 /dev/vg_storage/longhorn_lv
+  raw: mkfs.ext4 -F /dev/vg_storage/longhorn_lv
   changed_when: false
 
 - name: Crear directorios para montaje
@@ -77,7 +77,8 @@
 
 - name: Instalar servidor NFS
   raw: |
-    which exportfs || (apk add nfs-utils || yum install -y nfs-utils || apt-get install -y nfs-kernel-server)
+    which exportfs >/dev/null 2>&1 || \
+    (apk add nfs-utils || yum install -y nfs-utils || apt-get install -y nfs-kernel-server)
   changed_when: false
 
 - name: Crear archivo /etc/exports
@@ -88,5 +89,6 @@
 
 - name: Reiniciar servidor NFS
   raw: |
-    (systemctl enable nfs-server && systemctl restart nfs-server) ||     (rc-service nfs restart)
+    (systemctl enable nfs-server && systemctl restart nfs-server) || \
+    (rc-service nfs restart)
   changed_when: false
