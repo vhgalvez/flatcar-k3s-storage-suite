@@ -1,162 +1,92 @@
 # roles/storage_setup/tasks/main.yml
-# Este rol prepara el disco de datos adicional (p. ej. /dev/vdb) en nodos de almacenamiento.
-# Incluye creación de LVM, sistemas de archivos, configuración NFS y montaje.
+# Este rol prepara el disco de datos adicional (/dev/vdb) en nodos de almacenamiento.
+# Usa solo tareas raw para compatibilidad con sistemas sin Python (ej. Flatcar Linux)
 
-- name: Verificar presencia de disco de datos
-  ansible.builtin.stat:
-    path: /dev/vdb
-  register: storage_dev
-  become: yes
-
-- name: Abortar si el disco de datos no existe
-  ansible.builtin.fail:
-    msg: "ERROR: No se encontró el disco de datos (/dev/vdb) en {{ inventory_hostname }}. Verifique la configuración de hardware."
-  when: not storage_dev.stat.exists or (storage_dev.stat.exists and storage_dev.stat.isblk is not defined)
-
-- name: Identificar disco adicional sin uso (omitir discos del sistema o montados)
-  ansible.builtin.set_fact:
-    candidate_disks: "{{ candidate_disks | default([]) + [item.key] }}"
-  when:
-    - item.value.partitions | length == 0
-    - item.key not in ['vda', 'sda', 'nvme0n1']
-    - item.key | regex_search('^loop') is not true
-    - item.key | regex_search('^sr') is not true
-    - "'/dev/' ~ item.key not in (ansible_mounts | map(attribute='device') | list)"
-  with_dict: "{{ ansible_devices }}"
-  register: find_disks
-
-- name: Seleccionar disco de datos para almacenamiento
-  ansible.builtin.set_fact:
-    storage_disk: "{{ find_disks.results[0].item.key }}"
-  when: find_disks.results|length > 0
-
-- name: Validar disco de datos identificado
-  ansible.builtin.fail:
-    msg: "ERROR: No se identificó ningún disco de datos adicional en {{ inventory_hostname }} para configurar el almacenamiento."
-  when: storage_disk is not defined
-
-- name: Mostrar disco seleccionado (debug)
-  ansible.builtin.debug:
-    msg: "Disco de datos encontrado en {{ inventory_hostname }}: /dev/{{ storage_disk }}"
-  when: storage_disk is defined
-
-- name: Crear tabla de partición en disco de datos
-  community.general.parted:
-    device: "/dev/{{ storage_disk }}"
-    label: gpt
-    number: 1
-    state: present
-    part_start: "0%"
-    part_end: "100%"
-    name: data
-  when: storage_disk is defined
-
-- name: Crear volumen físico LVM en la nueva partición
-  community.general.lvg:
-    vg: vg_storage
-    pvs: "/dev/{{ storage_disk }}1"
-  when: storage_disk is defined
-
-- name: Crear volumen lógico para PostgreSQL
-  community.general.lvol:
-    vg: vg_storage
-    lv: postgres_lv
-    size: 20G
-  when: storage_disk is defined
-
-- name: Crear volumen lógico para datos compartidos
-  community.general.lvol:
-    vg: vg_storage
-    lv: shared_lv
-    size: 20G
-  when: storage_disk is defined
-
-- name: Crear volumen lógico para Longhorn (resto del espacio)
-  community.general.lvol:
-    vg: vg_storage
-    lv: longhorn_lv
-    size: 100%FREE
-  when: storage_disk is defined
-
-- name: Formatear volumen de PostgreSQL
-  community.general.filesystem:
-    fstype: ext4
-    dev: "/dev/vg_storage/postgres_lv"
-  when: storage_disk is defined
-
-- name: Formatear volumen de compartidos
-  community.general.filesystem:
-    fstype: ext4
-    dev: "/dev/vg_storage/shared_lv"
-  when: storage_disk is defined
-
-- name: Formatear volumen de Longhorn
-  community.general.filesystem:
-    fstype: ext4
-    dev: "/dev/vg_storage/longhorn_lv"
-  when: storage_disk is defined
-
-- name: Crear directorio para PostgreSQL (NFS export)
-  ansible.builtin.file:
-    path: /srv/nfs/postgresql
-    state: directory
-    mode: '0775'
-  when: storage_disk is defined
-
-- name: Crear directorio para datos compartidos (NFS export)
-  ansible.builtin.file:
-    path: /srv/nfs/shared
-    state: directory
-    mode: '0775'
-  when: storage_disk is defined
-
-- name: Crear punto de montaje para Longhorn
-  ansible.builtin.file:
-    path: /mnt/longhorn-disk
-    state: directory
-    mode: '0775'
-  when: storage_disk is defined
-
-- name: Montar volumen PostgreSQL
-  ansible.posix.mount:
-    src: "/dev/vg_storage/postgres_lv"
-    path: /srv/nfs/postgresql
-    fstype: ext4
-    state: mounted
-  when: storage_disk is defined
-
-- name: Montar volumen compartido
-  ansible.posix.mount:
-    src: "/dev/vg_storage/shared_lv"
-    path: /srv/nfs/shared
-    fstype: ext4
-    state: mounted
-  when: storage_disk is defined
-
-- name: Montar volumen Longhorn
-  ansible.posix.mount:
-    src: "/dev/vg_storage/longhorn_lv"
-    path: /mnt/longhorn-disk
-    fstype: ext4
-    state: mounted
-  when: storage_disk is defined
-
-- name: Instalar servidor NFS (solo si no está instalado)
-  ansible.builtin.raw: |
-    which exportfs >/dev/null 2>&1 || \
-    (sudo apk add nfs-utils || sudo yum install -y nfs-utils || sudo apt-get install -y nfs-kernel-server)
+- name: Verificar existencia del disco /dev/vdb
+  raw: test -b /dev/vdb
+  register: disk_check
+  failed_when: disk_check.rc != 0
   changed_when: false
 
-- name: Configurar exportaciones NFS
-  ansible.builtin.copy:
-    dest: /etc/exports
-    content: |
-      /srv/nfs/postgresql *(rw,sync,no_subtree_check,no_root_squash)
-      /srv/nfs/shared *(rw,sync,no_subtree_check,no_root_squash)
-    mode: '0644'
+- name: Crear tabla de particiones GPT
+  raw: parted -s /dev/vdb mklabel gpt
+  changed_when: false
 
-- name: Habilitar y arrancar servicio NFS
-  ansible.builtin.raw: |
-    (sudo systemctl enable nfs-server && sudo systemctl restart nfs-server) || \
-    (sudo rc-service nfs restart)
+- name: Crear partición primaria 100%
+  raw: parted -s /dev/vdb mkpart primary 0% 100%
+  changed_when: false
+
+- name: Esperar a que /dev/vdb1 aparezca
+  raw: |
+    for i in $(seq 1 5); do
+      test -b /dev/vdb1 && exit 0
+      sleep 1
+    done
+    exit 1
+  register: wait_partition
+  failed_when: wait_partition.rc != 0
+  changed_when: false
+
+- name: Crear volumen físico LVM
+  raw: pvcreate -ff -y /dev/vdb1
+  changed_when: false
+
+- name: Crear grupo de volúmenes
+  raw: vgcreate vg_storage /dev/vdb1
+  changed_when: false
+
+- name: Crear volumen lógico para PostgreSQL
+  raw: lvcreate -L 20G -n postgres_lv vg_storage
+  changed_when: false
+
+- name: Crear volumen lógico para datos compartidos
+  raw: lvcreate -L 20G -n shared_lv vg_storage
+  changed_when: false
+
+- name: Crear volumen lógico para Longhorn (resto)
+  raw: lvcreate -l 100%FREE -n longhorn_lv vg_storage
+  changed_when: false
+
+- name: Formatear postgres_lv
+  raw: mkfs.ext4 /dev/vg_storage/postgres_lv
+  changed_when: false
+
+- name: Formatear shared_lv
+  raw: mkfs.ext4 /dev/vg_storage/shared_lv
+  changed_when: false
+
+- name: Formatear longhorn_lv
+  raw: mkfs.ext4 /dev/vg_storage/longhorn_lv
+  changed_when: false
+
+- name: Crear directorios para montaje
+  raw: mkdir -p /srv/nfs/postgresql /srv/nfs/shared /mnt/longhorn-disk
+  changed_when: false
+
+- name: Montar postgres_lv
+  raw: mount /dev/vg_storage/postgres_lv /srv/nfs/postgresql
+  changed_when: false
+
+- name: Montar shared_lv
+  raw: mount /dev/vg_storage/shared_lv /srv/nfs/shared
+  changed_when: false
+
+- name: Montar longhorn_lv
+  raw: mount /dev/vg_storage/longhorn_lv /mnt/longhorn-disk
+  changed_when: false
+
+- name: Instalar servidor NFS
+  raw: |
+    which exportfs || (apk add nfs-utils || yum install -y nfs-utils || apt-get install -y nfs-kernel-server)
+  changed_when: false
+
+- name: Crear archivo /etc/exports
+  raw: |
+    echo "/srv/nfs/postgresql *(rw,sync,no_subtree_check,no_root_squash)" > /etc/exports
+    echo "/srv/nfs/shared *(rw,sync,no_subtree_check,no_root_squash)" >> /etc/exports
+  changed_when: false
+
+- name: Reiniciar servidor NFS
+  raw: |
+    (systemctl enable nfs-server && systemctl restart nfs-server) ||     (rc-service nfs restart)
   changed_when: false
