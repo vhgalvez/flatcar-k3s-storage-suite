@@ -122,6 +122,15 @@ sudo ansible-playbook playbooks/playbook_cleanup.yml -i inventory/hosts.ini --ch
 > ⚠️ **Este playbook no elimina máquinas virtuales ni destruye configuraciones fuera del disco `/dev/vdb`.**
 
 ---
+## 📊 Ejemplo de configuración
+
+![alt text](image/alamacenamiento_workers.png)
+
+![alt text](image/almacenamiento_cluster.png)
+
+![alt text](image/clean_almacenamiento.png)
+
+---
 
 ## 🛡️ Conclusión
 
