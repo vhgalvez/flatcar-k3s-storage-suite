@@ -1,5 +1,5 @@
 ---
-# playbook_cleanup.yml
+# playbooks/playbook_cleanup.yml
 # 🔁 Limpia almacenamiento en nodos storage y workers (solo /dev/vdb).
 # ⚠️ Incluye verificación -e "confirm_cleanup=yes" para evitar accidentes.
 
@@ -17,13 +17,12 @@
         success_msg: "🧹 Confirmación recibida. Iniciando limpieza del nodo {{ inventory_hostname }}..."
 
   tasks:
-    - name: 🔌 Desmontar volúmenes montados
-      ansible.posix.umount:
-        name: "{{ item }}"
-      loop:
-        - /srv/nfs/postgresql
-        - /srv/nfs/shared
-        - /mnt/longhorn-disk
+    - name: 🔌 Desmontar volúmenes montados (raw)
+      ansible.builtin.raw: |
+        umount -f /srv/nfs/postgresql 2>/dev/null || true
+        umount -f /srv/nfs/shared 2>/dev/null || true
+        umount -f /mnt/longhorn-disk 2>/dev/null || true
+      changed_when: false
       ignore_errors: true
 
     - name: 🛑 Detener servicio NFS (solo en storage)
@@ -54,14 +53,13 @@
       ignore_errors: true
 
     - name: 💣 Borrar firma LVM del disco /dev/vdb1 (solo en storage)
-      ansible.builtin.command: pvremove -y /dev/vdb1
-      register: pvremove_result
-      changed_when: "'wiped' in pvremove_result.stdout or 'successfully' in pvremove_result.stdout"
+      ansible.builtin.raw: |
+        pvremove -y /dev/vdb1 || true
       when: "'storage' in group_names"
-      failed_when: false
+      changed_when: false
       ignore_errors: true
 
-    - name: 🚫 Borrar tabla de partición /dev/vdb
+    - name: 🚫 Borrar tabla de partición /dev/vdb (solo en storage)
       community.general.parted:
         device: /dev/vdb
         state: absent
