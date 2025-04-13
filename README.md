@@ -140,3 +140,9 @@ sudo ansible-playbook playbooks/playbook_cleanup.yml -i inventory/hosts.ini --ch
 Este conjunto de playbooks garantiza una configuración de almacenamiento automatizada y segura para su clúster Kubernetes con Flatcar. Gracias a las validaciones y protecciones incluidas, puede trabajar con confianza evitando daños accidentales al sistema operativo o pérdida de datos.
 
 > **Repositorio del proyecto:** [`flatcar-k3s-storage-suite`](https://github.com/vhgalvez/flatcar-k3s-storage-suite)
+>
+> > Proyecto independiente para usarse como prerequisito en arquitecturas como [FlatcarMicroCloud](https://github.com/vhgalvez/FlatcarMicroCloud)
+
+## 📜 Licencia
+
+## 📜 Licencia este proyecto está licenciado bajo la **Licencia MIT** [LICENSE](LICENSE).
