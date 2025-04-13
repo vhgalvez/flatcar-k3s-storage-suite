@@ -6,14 +6,14 @@
 - name: 📦 Preparar disco de almacenamiento con LVM y exportar NFS
   hosts: storage
   become: true
-  gather_facts: true
+  gather_facts: false
   roles:
     - role: storage_setup
 
 - name: 💾 Preparar nodos Longhorn (formatear y montar /dev/vdb)
   hosts: workers
   become: true
-  gather_facts: true
+  gather_facts: false
   roles:
     - role: longhorn_worker
 
