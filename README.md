@@ -126,10 +126,11 @@ sudo ansible-playbook playbooks/playbook_cleanup.yml -i inventory/hosts.ini --ch
 
 ![alt text](image/alamacenamiento_workers.png)
 
+![alt text](image/alamacenamiento_storage.png)
+
 ![alt text](image/almacenamiento_cluster.png)
 
 ![alt text](image/clean_almacenamiento.png)
-
 ---
 
 ## 🛡️ Conclusión
