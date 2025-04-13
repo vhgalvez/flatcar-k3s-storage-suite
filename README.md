@@ -1,206 +1,101 @@
+# flatcar-k3s-storage-suite - Guía de Uso Seguro
 
-# 📦 Ansible Storage Cluster – FlatcarMicroCloud
+Este proyecto Ansible proporciona playbooks seguros para configurar almacenamiento persistente en un clúster Kubernetes sobre **Flatcar Linux y Rocky Linux**, utilizando LVM, NFS y Longhorn. Las tareas han sido cuidadosamente reforzadas para evitar operaciones destructivas accidentales y garantizar una ejecución segura.
 
-Este proyecto automatiza la configuración de un nodo de almacenamiento (`storage1`) usando **Ansible**, optimizado para **Flatcar Linux** (sin Python) y clústeres Kubernetes con **K3s**. Forma parte del ecosistema [FlatcarMicroCloud](https://github.com/vhgalvez/FlatcarMicroCloud).
-
----
-
-## ✨ Visión General
-
-El nodo `storage1` ofrece almacenamiento persistente y distribuido de alta disponibilidad para:
-
-- Bases de datos como **PostgreSQL**
-- Datos compartidos entre pods (**RWX**)
-- Volúmenes gestionados por **Longhorn (RWO)**
-
-Utiliza **LVM**, **NFS** y almacenamiento local en `/dev/vdb`.
+> ⚠️ **ADVERTENCIA**: Lea completamente esta guía antes de ejecutar los playbooks. Las tareas de particionado y formateo pueden eliminar datos si se usan incorrectamente.
 
 ---
 
-## 📚 Tabla de Roles y Almacenamiento por Nodo
+## ⚙️ Componentes incluidos
 
-| Nodo        | Disco                 | Rol en Longhorn                    | Observaciones                            |
-|-------------|-----------------------|------------------------------------|------------------------------------------|
-| `storage1`  | `/mnt/longhorn-disk`  | Nodo **dedicado** de almacenamiento | ✅ Ideal: marcar como `Not Schedulable` |
-| `worker1`   | Disco local de 50 GB   | Nodo mixto (cálculo + almacenamiento) | ✅ Recomendado                         |
-| `worker2`   | Disco local de 50 GB   | Nodo mixto                          | ✅                                       |
-| `worker3`   | Disco local de 50 GB   | Nodo mixto                          | ✅                                       |
-
-> ⚠️ Se recomienda marcar `storage1` como **Not Schedulable** en Longhorn para evitar ejecutar pods ahí.
-
----
-
-## 📁 Directorios Montados en `storage1`
-
-| Ruta                    | Propósito                                  | Tipo de Acceso     |
-|-------------------------|--------------------------------------------|--------------------|
-| `/srv/nfs/postgresql`   | Volumen persistente para PostgreSQL vía NFS | RW (Read/Write)    |
-| `/srv/nfs/shared`       | Volumen compartido para pods                | RWX (ReadWriteMany)|
-| `/mnt/longhorn-disk`    | Disco para almacenamiento Longhorn          | RWO (ReadWriteOnce)|
+- Configuración de volúmenes LVM para:
+  - PostgreSQL (`/srv/nfs/postgresql`)
+  - Datos compartidos (`/srv/nfs/shared`)
+  - Longhorn (`/mnt/longhorn-disk`)
+- Exportación NFS (opcional)
+- Preparación automática y segura de discos `/dev/vdb`
+- Playbook de limpieza con confirmación obligatoria
 
 ---
 
-## 🔧 Tecnologías Usadas
+## ⚠️ Recomendaciones de Seguridad
 
-- **LVM**: Para crear volúmenes lógicos escalables sobre `/dev/vdb`
-- **NFS Server**: Exporta volúmenes accesibles por otros nodos
-- **Longhorn**: Almacenamiento distribuido para Kubernetes
-
----
-
-## ⚙️ Requisitos Previos
-
-- Nodo o VM con **Flatcar Linux**
-- Disco adicional (`/dev/vdb`) de **80 GB**
-- Acceso SSH con clave en `inventory/hosts.ini`
-- Ansible 2.14+ instalado en el nodo controlador
+- **Inventario validado:** Revise `inventory/hosts.ini`. Asegúrese de que solo nodos con discos secundarios estén en los grupos `storage` o `longhorn_nodes`.
+- **Evitar nodos críticos:** **NO incluya** en estos grupos a los nodos master ni al servidor de virtualización.
+- **Discos secundarios solamente:** Solo se operará sobre `/dev/vdb`. **No se tocarán discos del sistema como `/dev/vda`, `/dev/sda`, `nvme0n1`, etc.**
+- **Confirmación para limpieza:** El playbook de limpieza solo se ejecutará si pasa la variable `confirm_cleanup=yes`.
 
 ---
 
-## 📂 Estructura del Proyecto
+## ✅ Ejecución Segura - Paso a Paso
 
-```bash
-flatcar-k3s-storage-suite/
-├── inventory/                    # ✅ Inventario Ansible
-│   └── hosts.ini
-├── playbooks/                   # ✅ Playbooks adicionales
-│   ├── label_longhorn_nodes_from_master.yml
-│   ├── longhorn_worker_disk_setup.yml
-│   ├── nfs_config.yml
-│   └── playbook_cleanup.yml
-├── roles/                       # ✅ Roles reutilizables
-│   ├── storage_setup/
-│   ├── nfs_config/
-│   └── longhorn_worker/
-├── site.yml                     # ✅ Orquestador principal (EN LA RAÍZ → PERFECTO)
-├── README.md
-└── storage.png
+### 1. Configurar acceso SSH
+Asegúrese de tener acceso sin contraseña (mediante clave) a todos los nodos, usando el usuario `core` y la clave privada indicada en el inventario.
 
-```
+### 2. Verificar inventario (`inventory/hosts.ini`)
+Confirme que los nodos estén correctamente agrupados:
+- Grupo `storage`: nodos con volúmenes LVM y NFS (ej. `10.17.4.27`)
+- Grupo `longhorn_nodes`: nodos con disco para Longhorn (`10.17.4.24`, `10.17.4.27`)
+- No incluir aquí `master1`, `master2`, `master3` ni el servidor de virtualización
 
----
-
-## 🚀 Ejecución
-
-### 1️⃣ Configurar almacenamiento (`/dev/vdb`)
-
+### 3. Ejecutar configuración de almacenamiento
 ```bash
 sudo ansible-playbook -i inventory/hosts.ini site.yml
 ```
 
-### 2️⃣ Limpiar configuración previa (si es necesario)
+Este playbook:
+- Detecta y valida que `/dev/vdb` esté presente, vacío y sin montar
+- Crea volúmenes LVM para PostgreSQL, datos compartidos y Longhorn
+- Formatea los volúmenes y los monta en rutas adecuadas
 
+---
+
+### 4. Configurar NFS (si se requiere)
+Ejecute el siguiente playbook en el nodo de almacenamiento (ej. `storage1`) después de `site.yml`:
 ```bash
-sudo ansible-playbook -i inventory/hosts.ini playbook_cleanup.yml
+sudo ansible-playbook -i inventory/hosts.ini nfs_config.yml
 ```
 
----
-
-## 📸 Ansible OK
-
-![Ansible OK](storage.png)
+Esto activará el servicio NFS y exportará los directorios necesarios.
 
 ---
 
-## 🧪 Verificación
-
+### 5. Validar configuración
+En `storage1`, ejecute:
 ```bash
 df -h
-sudo exportfs -v
-systemctl status nfs-server
 ```
+Verifique que aparecen montados:
+- `/srv/nfs/postgresql`
+- `/srv/nfs/shared`
+- `/mnt/longhorn-disk`
 
-### Montar NFS desde otro nodo
-
-```bash
-sudo mount -t nfs storage1.cefaslocalserver.com:/srv/nfs/postgresql /mnt
-```
+En Longhorn (UI o `kubectl`), verifique que los nodos usan `/mnt/longhorn-disk` correctamente.
 
 ---
 
-## 🏷️ Etiquetar y proteger el nodo `storage1` para Longhorn
+## 🧹 Limpieza (solo si desea borrar todo)
 
-Para una gestión más clara de los nodos que participan en el almacenamiento con **Longhorn**, es recomendable:
-
-- Etiquetar el nodo con una clave personalizada.
-- Marcarlo como **No Schedulable** para evitar que se usen para pods normales.
-
-### 📌 Propósito
-
-- Identificar `storage1` como nodo dedicado a almacenamiento.
-- Aplicar políticas `nodeSelector` o `affinity`.
-- Separar roles de cómputo y almacenamiento.
-
-### 🛠️ Comandos Manuales
+⚠️ **Advertencia:** Esto eliminará todos los datos del disco `/dev/vdb`. Úselo solo si desea reprovisionar el nodo desde cero.
 
 ```bash
-kubectl label node storage1.cefaslocalserver.com longhorn-node=true --overwrite
-kubectl taint nodes storage1.cefaslocalserver.com node-role.kubernetes.io/storage=true:NoSchedule
+sudo ansible-playbook -i inventory/hosts.ini playbook_cleanup.yml -e "confirm_cleanup=yes"
 ```
 
-### 🔍 Verificación
-
-```bash
-kubectl get nodes --show-labels | grep storage1
-kubectl describe node storage1.cefaslocalserver.com | grep Taints
-```
-
-Deberías ver:
-
-```bash
-longhorn-node=true
-Taints: node-role.kubernetes.io/storage=true:NoSchedule
-```
+Este playbook desmontará los volúmenes, eliminará los LVs, el VG, y la partición de `/dev/vdb`, **solo si confirma la limpieza**.
 
 ---
 
-## 📦 Tabla de Almacenamiento por VM
+## 🔍 Notas Finales
 
-| Nodo           | Rol                   | IP            | Disco OS | Disco Extra | Uso del Disco Extra                                         |
-|----------------|------------------------|----------------|----------|-------------|-------------------------------------------------------------|
-| master1        | Master Kubernetes      | 10.17.4.21     | 50 GB    | —           | —                                                           |
-| master2        | Master Kubernetes      | 10.17.4.22     | 50 GB    | —           | —                                                           |
-| master3        | Master Kubernetes      | 10.17.4.23     | 50 GB    | —           | —                                                           |
-| worker1        | Worker + Longhorn      | 10.17.4.24     | 20 GB    | 40 GB       | Almacenamiento Longhorn (RWO)                               |
-| worker2        | Worker + Longhorn      | 10.17.4.25     | 20 GB    | 40 GB       | Almacenamiento Longhorn (RWO)                               |
-| worker3        | Worker + Longhorn      | 10.17.4.26     | 20 GB    | 40 GB       | Almacenamiento Longhorn (RWO)                               |
-| storage1       | NFS + Longhorn Backup  | 10.17.4.27     | 10 GB    | 80 GB       | PostgreSQL, compartidos y respaldo de Longhorn              |
-| postgresql1    | DB Externa (futura)    | —              | —        | —           | Montará `/srv/nfs/postgresql` vía NFS                       |
+- **Idempotencia:** El playbook es seguro para ejecutarse múltiples veces. Si el disco ya está configurado, abortará o saltará las tareas.
+- **Extensibilidad:** Puede añadir más nodos con discos adicionales en los grupos `storage` o `longhorn_nodes` sin modificar los roles.
+- **Monitoreo:** Verifique periódicamente espacio libre y salud de discos. Incluya los puntos de montaje en su sistema de backups.
 
 ---
 
-## ✍️ Autor
+## 🛡️ Conclusión
 
-**vhgalvez** – [FlatcarMicroCloud en GitHub](https://github.com/vhgalvez/FlatcarMicroCloud)
+Este conjunto de playbooks garantiza una configuración de almacenamiento automatizada y segura para su clúster Kubernetes con Flatcar. Gracias a las validaciones y protecciones incluidas, puede trabajar con confianza evitando daños accidentales al sistema operativo o pérdida de datos.
 
-## 🛡️ Licencia
-
-MIT License — Libre para uso educativo y personal.
-
-
-🚀 Paso a paso de ejecución (solo comandos)
-bash
-Copiar
-Editar
-# 1️⃣ Configurar almacenamiento en storage1 (crea LVM, formatea, monta y exporta NFS)
-sudo ansible-playbook -i inventory/hosts.ini site.yml
-bash
-Copiar
-Editar
-# 2️⃣ (Opcional) Reexportar rutas NFS sin tocar LVM ni discos
-sudo ansible-playbook -i inventory/hosts.ini playbooks/nfs_config.yml
-bash
-Copiar
-Editar
-# 3️⃣ Configurar discos en workers para Longhorn (formatea, monta, etiqueta)
-sudo ansible-playbook -i inventory/hosts.ini playbooks/longhorn_worker_disk_setup.yml
-bash
-Copiar
-Editar
-# 4️⃣ (Opcional) Etiquetar los workers como longhorn-node desde master1
-sudo ansible-playbook -i inventory/hosts.ini playbooks/label_longhorn_nodes_from_master.yml
-bash
-Copiar
-Editar
-# 5️⃣ (⚠️ Si necesitas limpiar toda la configuración del nodo storage1)
-sudo ansible-playbook -i inventory/hosts.ini playbooks/playbook_cleanup.yml
+> **Repositorio del proyecto:** [`flatcar-k3s-storage-suite`](https://github.com/tu_usuario/flatcar-k3s-storage-suite)

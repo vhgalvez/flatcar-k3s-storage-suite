@@ -1,7 +1,9 @@
-# ruta: playbooks\install_longhorn.yml
 ---
-- name: Instalar Longhorn en el clúster Kubernetes (RAW)
-  hosts: masters[0]
+# Ruta: playbooks/install_longhorn.yml
+# 🚀 Instala Longhorn en el clúster Kubernetes usando k3s (modo raw, sin módulos Ansible)
+
+- name: 🚀 Instalar Longhorn en el clúster Kubernetes (RAW)
+  hosts: masters[0]  # Ejecuta desde el primer master (ajustable si se requiere)
   gather_facts: false
   become: false
 
@@ -11,28 +13,35 @@
     longhorn_manifest_url: "https://raw.githubusercontent.com/longhorn/longhorn/v1.6.1/deploy/longhorn.yaml"
 
   tasks:
-    - name: Verificar si el namespace ya existe
-      raw: sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} get ns {{ longhorn_namespace }}
+
+    - name: 🔍 Verificar si el namespace {{ longhorn_namespace }} ya existe
+      raw: |
+        sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} get ns {{ longhorn_namespace }}
       register: ns_check
       failed_when: false
       changed_when: false
 
-    - name: Crear namespace para Longhorn si no existe
-      raw: sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} create ns {{ longhorn_namespace }}
+    - name: 📦 Crear namespace para Longhorn si no existe
+      raw: |
+        sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} create ns {{ longhorn_namespace }}
       when: ns_check.rc != 0
 
-    - name: Aplicar manifiesto de Longhorn
-      raw: sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} apply -f {{ longhorn_manifest_url }}
+    - name: 📥 Aplicar manifiesto de instalación de Longhorn
+      raw: |
+        sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} apply -f {{ longhorn_manifest_url }}
       register: apply_longhorn
 
-    - name: Esperar a que los pods de Longhorn estén listos
-      raw: sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} wait --for=condition=Ready pod --all --timeout=300s
+    - name: ⏳ Esperar a que los pods de Longhorn estén listos (máx 5 minutos)
+      raw: |
+        sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} wait --for=condition=Ready pod --all --timeout=300s
       register: wait_longhorn
+      failed_when: wait_longhorn.rc != 0
 
-    - name: Mostrar estado final de pods de Longhorn
-      raw: sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} get pods
+    - name: 📊 Mostrar estado final de los pods Longhorn
+      raw: |
+        sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} get pods
       register: longhorn_pods
 
-    - name: Mostrar pods
+    - name: 📋 Imprimir lista de pods Longhorn
       debug:
         var: longhorn_pods.stdout_lines

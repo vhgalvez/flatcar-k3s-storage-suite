@@ -1,13 +1,32 @@
-# roles\nfs_config\tasks\main.yml
 ---
-- name: 📤 Configurar archivo /etc/exports con rutas NFS
-  raw: |
-    echo '/srv/nfs/postgresql *(rw,sync,no_subtree_check,no_root_squash)' > /etc/exports
-    echo '/srv/nfs/shared *(rw,sync,no_subtree_check,no_root_squash)' >> /etc/exports
-    exportfs -rav
+# roles/nfs_config/tasks/main.yml
+# Configura y exporta los directorios NFS en el nodo storage
 
-- name: 🔁 Reiniciar exportaciones NFS
-  raw: exportfs -rv
+- name: Instalar servidor NFS (solo si no está instalado)
+  ansible.builtin.raw: |
+    which exportfs >/dev/null 2>&1 || \
+    (sudo apk add nfs-utils || sudo yum install -y nfs-utils || sudo apt-get install -y nfs-kernel-server)
+  changed_when: false
 
-- name: 🛠️ Habilitar y arrancar el servicio NFS
-  raw: systemctl enable --now nfs-server || true
+- name: Crear directorios NFS exportados
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0775'
+  loop:
+    - /srv/nfs/postgresql
+    - /srv/nfs/shared
+
+- name: Configurar exportaciones NFS
+  ansible.builtin.copy:
+    dest: /etc/exports
+    content: |
+      /srv/nfs/postgresql *(rw,sync,no_subtree_check,no_root_squash)
+      /srv/nfs/shared *(rw,sync,no_subtree_check,no_root_squash)
+    mode: '0644'
+
+- name: Habilitar y arrancar servicio NFS
+  ansible.builtin.raw: |
+    (sudo systemctl enable nfs-server && sudo systemctl restart nfs-server) || \
+    (sudo rc-service nfs restart)
+  changed_when: false

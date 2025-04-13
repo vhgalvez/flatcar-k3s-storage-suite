@@ -1,5 +1,8 @@
-# Ruta: playbooks/label_longhorn_nodes_from_master.yml
 ---
+# Ruta: playbooks/label_longhorn_nodes_from_master.yml
+# 🏷️ Etiqueta nodos worker para habilitarlos como nodos de Longhorn
+# Ejecutar este playbook desde el nodo master1 para aplicar etiquetas en los workers
+
 - name: 🏷️ Etiquetar nodos worker con longhorn-node=true desde master1
   hosts: master1
   become: true

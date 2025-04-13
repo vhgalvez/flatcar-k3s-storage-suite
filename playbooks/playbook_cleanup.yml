@@ -1,33 +1,68 @@
-# ruta: playbooks\playbook_cleanup.yml
 ---
-- name: 🔄 Resetear almacenamiento en storage1
-  hosts: storage
+# playbook_cleanup.yml
+# Playbook para revertir la configuración de almacenamiento en storage1 (u otros nodos si es necesario).
+# Incluye protección para evitar ejecuciones accidentales mediante confirmación explícita.
+
+- hosts: storage
   become: true
-  gather_facts: false
+  gather_facts: yes
+
+  pre_tasks:
+    - name: Verificación de confirmación de limpieza
+      ansible.builtin.assert:
+        that:
+          - confirm_cleanup | default(false) | bool
+        fail_msg: "❌ ERROR: Debe confirmar la limpieza con -e 'confirm_cleanup=yes'"
+        success_msg: "✅ Confirmación recibida. Iniciando limpieza del nodo {{ inventory_hostname }}..."
 
   tasks:
-    - name: 🛑 Detener servicio NFS
-      raw: systemctl stop nfs-server || true
+    - name: Detener servicio NFS (si está presente)
+      ansible.builtin.service:
+        name: nfs-server
+        state: stopped
+        enabled: no
+      ignore_errors: yes
 
-    - name: 💽 Limpiar almacenamiento
-      raw: |
-        umount -f /srv/nfs/postgresql || true
-        umount -f /srv/nfs/shared || true
-        umount -f /mnt/longhorn-disk || true
-        lvremove -fy /dev/vg_data/postgresql_lv || true
-        lvremove -fy /dev/vg_data/shared_lv || true
-        lvremove -fy /dev/vg_data/longhorn_lv || true
-        vgremove -fy vg_data || true
-        pvremove -ff -y /dev/vdb || true
-        wipefs -a /dev/vdb
-        dd if=/dev/zero of=/dev/vdb bs=1M count=10 || true
+    - name: Desmontar volúmenes montados
+      ansible.posix.umount:
+        name: "{{ item }}"
+      loop:
+        - /srv/nfs/postgresql
+        - /srv/nfs/shared
+        - /mnt/longhorn-disk
+      ignore_errors: yes
 
-    - name: 🧹 Limpiar entradas fstab
-      raw: |
-        sed -i '/\/srv\/nfs\/postgresql/d' /etc/fstab
-        sed -i '/\/srv\/nfs\/shared/d' /etc/fstab
-        sed -i '/\/mnt\/longhorn-disk/d' /etc/fstab
+    - name: Eliminar volúmenes lógicos
+      community.general.lvol:
+        vg: vg_storage
+        lv: "{{ item }}"
+        state: absent
+      loop:
+        - postgres_lv
+        - shared_lv
+        - longhorn_lv
+      ignore_errors: yes
 
-    - name: 🧽 Eliminar puntos de montaje
-      raw: |
-        rm -rf /srv/nfs/postgresql /srv/nfs/shared /mnt/longhorn-disk
+    - name: Eliminar grupo de volúmenes
+      community.general.lvg:
+        vg: vg_storage
+        state: absent
+      ignore_errors: yes
+
+    - name: Borrar firma LVM del disco
+      ansible.builtin.command: pvremove -y /dev/vdb1
+      register: pvremove_result
+      changed_when: "'wiped' in pvremove_result.stdout or 'successfully' in pvremove_result.stdout"
+      failed_when: false
+      ignore_errors: yes
+
+    - name: Borrar tabla de partición de /dev/vdb
+      community.general.parted:
+        device: /dev/vdb
+        state: absent
+        number: 1
+      ignore_errors: yes
+
+    - name: Mostrar mensaje final (opcional)
+      ansible.builtin.debug:
+        msg: "✅ Limpieza completada en {{ inventory_hostname }}. Reinicie el nodo si es necesario."

@@ -1,29 +1,15 @@
-# site.yml
 ---
-- name: 1️⃣ Configurar nodo de almacenamiento (LVM + NFS)
-  hosts: storage
-  become: true
-  gather_facts: false
+# site.yml
+# Playbook principal para configurar almacenamiento con LVM, NFS y Longhorn
+
+- hosts: storage
+  become: yes
+  gather_facts: yes
   roles:
-    - storage_setup
+    - role: storage_setup
 
-- name: 2️⃣ Preparar discos en los nodos worker para Longhorn
-  hosts: workers
-  become: true
-  gather_facts: false
+- hosts: longhorn_nodes
+  become: yes
+  gather_facts: yes
   roles:
-    - longhorn_worker
-
-- name: 3️⃣ Etiquetar nodos worker desde master1 para Longhorn
-  hosts: masters[0]
-  become: true
-  gather_facts: false
-  tasks:
-    - name: 🏷️ Etiquetar nodos worker con 'longhorn=enabled'
-      raw: |
-        k3s kubectl label node worker1.cefaslocalserver.com longhorn-node=true --overwrite
-        k3s kubectl label node worker2.cefaslocalserver.com longhorn-node=true --overwrite
-        k3s kubectl label node worker3.cefaslocalserver.com longhorn-node=true --overwrite
-
-- name: 4️⃣ Instalar Longhorn en el clúster Kubernetes
-  import_playbook: playbooks/install_longhorn.yml
+    - role: longhorn_worker

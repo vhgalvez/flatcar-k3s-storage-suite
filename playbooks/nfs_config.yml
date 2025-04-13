@@ -1,9 +1,0 @@
-# playbooks\nfs_config.yml
----
-- name: 📤 Configurar exportaciones NFS en el nodo de almacenamiento
-  hosts: storage
-  become: true
-  gather_facts: false
-
-  roles:
-    - nfs_config

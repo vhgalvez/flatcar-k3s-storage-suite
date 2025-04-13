@@ -1,67 +1,144 @@
-# roles\storage_setup\tasks\main.yml
 ---
-- name: 🛑 Detener servicio NFS si está activo
-  raw: systemctl stop nfs-server || true
-  ignore_errors: true
+# roles/storage_setup/tasks/main.yml
+# Este rol prepara el disco de datos adicional (p. ej. /dev/vdb) en nodos de almacenamiento.
+# Incluye creación de LVM y sistemas de archivos para PostgreSQL, datos compartidos y Longhorn.
+# Se implementaron verificaciones para no formatear discos del sistema ni ya montados.
 
-- name: 💽 Desmontar y limpiar volúmenes antiguos si existen
-  raw: |
-    umount -f /srv/nfs/postgresql || true
-    umount -f /srv/nfs/shared || true
-    umount -f /mnt/longhorn-disk || true
-    lvremove -fy /dev/vg_data/postgresql_lv || true
-    lvremove -fy /dev/vg_data/shared_lv || true
-    lvremove -fy /dev/vg_data/longhorn_lv || true
-    vgremove -fy vg_data || true
-    pvremove -ff -y /dev/vdb || true
+- name: Verificar presencia de disco de datos
+  ansible.builtin.stat:
+    path: /dev/vdb
+  register: storage_dev
+  become: yes
 
-- name: ➕ Crear volumen físico y grupo de volúmenes
-  raw: |
-    pvcreate -y /dev/vdb
-    vgcreate vg_data /dev/vdb
+- name: Abortar si el disco de datos no existe
+  ansible.builtin.fail:
+    msg: "ERROR: No se encontró el disco de datos (/dev/vdb) en {{ inventory_hostname }}. Verifique la configuración de hardware."
+  when: not storage_dev.stat.exists or (storage_dev.stat.exists and storage_dev.stat.isblk is not defined)
 
-- name: ➕ Crear volumen lógico PostgreSQL
-  raw: lvcreate -y -L 10G -n postgresql_lv vg_data
+- name: Identificar disco adicional sin uso (omitir discos del sistema o montados)
+  ansible.builtin.set_fact:
+    candidate_disks: "{{ candidate_disks | default([]) + [item.key] }}"
+  when:
+    - item.value.partitions | length == 0
+    - item.key not in ['vda', 'sda', 'nvme0n1']
+    - item.key | regex_search('^loop') is not true
+    - item.key | regex_search('^sr') is not true
+    - "'/dev/' ~ item.key not in (ansible_mounts | map(attribute='device') | list)"
+  with_dict: "{{ ansible_devices }}"
+  register: find_disks
 
-- name: ➕ Crear volumen lógico Shared
-  raw: lvcreate -y -L 9G -n shared_lv vg_data
+- name: Seleccionar disco de datos para almacenamiento
+  ansible.builtin.set_fact:
+    storage_disk: "{{ find_disks.results[0].item.key }}"
+  when: find_disks.results|length > 0
 
-- name: ➕ Crear volumen lógico Longhorn
-  raw: lvcreate -y -L 58G -n longhorn_lv vg_data
+- name: Validar disco de datos identificado
+  ansible.builtin.fail:
+    msg: "ERROR: No se identificó ningún disco de datos adicional en {{ inventory_hostname }} para configurar el almacenamiento."
+  when: storage_disk is not defined
 
-- name: 🧱 Formatear volúmenes
-  raw: |
-    mkfs.ext4 -F /dev/vg_data/postgresql_lv
-    mkfs.ext4 -F /dev/vg_data/shared_lv
-    mkfs.ext4 -F /dev/vg_data/longhorn_lv
+- name: Mostrar disco seleccionado (debug)
+  ansible.builtin.debug:
+    msg: "Disco de datos encontrado en {{ inventory_hostname }}: /dev/{{ storage_disk }}"
+  when: storage_disk is defined
 
-- name: 📁 Crear puntos de montaje y añadir a fstab
-  raw: |
-    mkdir -p /srv/nfs/postgresql /srv/nfs/shared /mnt/longhorn-disk
-    grep -q '/srv/nfs/postgresql' /etc/fstab || echo '/dev/vg_data/postgresql_lv /srv/nfs/postgresql ext4 defaults 0 2' >> /etc/fstab
-    grep -q '/srv/nfs/shared'     /etc/fstab || echo '/dev/vg_data/shared_lv     /srv/nfs/shared     ext4 defaults 0 2' >> /etc/fstab
-    grep -q '/mnt/longhorn-disk' /etc/fstab || echo '/dev/vg_data/longhorn_lv   /mnt/longhorn-disk ext4 defaults 0 2' >> /etc/fstab
+- name: Crear tabla de partición en disco de datos
+  community.general.parted:
+    device: "/dev/{{ storage_disk }}"
+    label: gpt
+    number: 1
+    state: present
+    part_start: "0%"
+    part_end: "100%"
+    name: data
+  when: storage_disk is defined
 
-- name: 🔄 Montar volúmenes
-  raw: mount -a
+- name: Crear volumen físico LVM en la nueva partición
+  community.general.lvg:
+    vg: vg_storage
+    pvs: "/dev/{{ storage_disk }}1"
+  when: storage_disk is defined
 
-- name: 🧷 Asignar permisos a puntos de montaje
-  raw: |
-    chmod 0777 /srv/nfs/postgresql
-    chmod 0777 /srv/nfs/shared
-    chmod 0777 /mnt/longhorn-disk
+- name: Crear volumen lógico para PostgreSQL
+  community.general.lvol:
+    vg: vg_storage
+    lv: postgres_lv
+    size: 20G
+  when: storage_disk is defined
 
-- name: 🛠️ Activar y arrancar servicio NFS
-  raw: |
-    systemctl enable --now nfs-server || true
+- name: Crear volumen lógico para datos compartidos
+  community.general.lvol:
+    vg: vg_storage
+    lv: shared_lv
+    size: 20G
+  when: storage_disk is defined
 
-- name: 📤 Exportar rutas NFS
-  raw: |
-    echo '/srv/nfs/postgresql *(rw,sync,no_subtree_check,no_root_squash)' > /etc/exports
-    echo '/srv/nfs/shared *(rw,sync,no_subtree_check,no_root_squash)' >> /etc/exports
-    exportfs -rv
+- name: Crear volumen lógico para Longhorn (resto del espacio)
+  community.general.lvol:
+    vg: vg_storage
+    lv: longhorn_lv
+    size: 100%FREE
+  when: storage_disk is defined
 
-- name: 🏷️ Etiquetar nodo Longhorn (opcional)
-  raw: |
-    kubectl label node storage1.cefaslocalserver.com longhorn-node=true --overwrite || true
-  ignore_errors: true
+- name: Formatear volumen de PostgreSQL
+  community.general.filesystem:
+    fstype: ext4
+    dev: "/dev/vg_storage/postgres_lv"
+  when: storage_disk is defined
+
+- name: Formatear volumen de compartidos
+  community.general.filesystem:
+    fstype: ext4
+    dev: "/dev/vg_storage/shared_lv"
+  when: storage_disk is defined
+
+- name: Formatear volumen de Longhorn
+  community.general.filesystem:
+    fstype: ext4
+    dev: "/dev/vg_storage/longhorn_lv"
+  when: storage_disk is defined
+
+- name: Crear directorio para PostgreSQL (NFS export)
+  ansible.builtin.file:
+    path: /srv/nfs/postgresql
+    state: directory
+    mode: '0775'
+  when: storage_disk is defined
+
+- name: Crear directorio para datos compartidos (NFS export)
+  ansible.builtin.file:
+    path: /srv/nfs/shared
+    state: directory
+    mode: '0775'
+  when: storage_disk is defined
+
+- name: Crear punto de montaje para Longhorn
+  ansible.builtin.file:
+    path: /mnt/longhorn-disk
+    state: directory
+    mode: '0775'
+  when: storage_disk is defined
+
+- name: Montar volumen PostgreSQL
+  ansible.posix.mount:
+    src: "/dev/vg_storage/postgres_lv"
+    path: /srv/nfs/postgresql
+    fstype: ext4
+    state: mounted
+  when: storage_disk is defined
+
+- name: Montar volumen compartido
+  ansible.posix.mount:
+    src: "/dev/vg_storage/shared_lv"
+    path: /srv/nfs/shared
+    fstype: ext4
+    state: mounted
+  when: storage_disk is defined
+
+- name: Montar volumen Longhorn
+  ansible.posix.mount:
+    src: "/dev/vg_storage/longhorn_lv"
+    path: /mnt/longhorn-disk
+    fstype: ext4
+    state: mounted
+  when: storage_disk is defined
