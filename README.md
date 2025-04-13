@@ -153,3 +153,22 @@ No está montado ni usado (puedes usarlo para NFS, backups, etc.)
 Nodo	Disco SO (vda)	Uso Sistema	Disco Adicional (vdb)	Estado Disco Adicional
 worker1	20 GB	~2.5 GB	40 GB	Libre
 storage1	10 GB	~2.5 GB	80 GB	Libre
+
+
+## 🧹 Limpieza del nodo de almacenamiento (opcional)
+
+Si necesitas reiniciar desde cero el nodo `storage` (por ejemplo, para reprovisionarlo sin destruir la VM), puedes ejecutar:
+
+```bash
+ansible-playbook playbooks/playbook_cleanup.yml -e confirm_cleanup=yes
+Este playbook:
+
+Desmonta volúmenes
+
+Elimina LVM (vg y lvs)
+
+Borra la partición y firma de LVM de /dev/vdb
+
+Detiene el servicio NFS
+
+⚠️ Usar solo si sabes lo que estás haciendo. No borra VMs.
