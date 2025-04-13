@@ -143,6 +143,5 @@ Este conjunto de playbooks garantiza una configuración de almacenamiento automa
 >
 > > Proyecto independiente para usarse como prerequisito en arquitecturas como [FlatcarMicroCloud](https://github.com/vhgalvez/FlatcarMicroCloud)
 
-## 📜 Licencia
 
 ## 📜 Licencia este proyecto está licenciado bajo la **Licencia MIT** [LICENSE](LICENSE).
