@@ -1,60 +1,39 @@
 ---
 # roles/longhorn_worker/tasks/main.yml
 # Este rol prepara el disco adicional (/dev/vdb) en los nodos destinados a Longhorn.
-# Solo actuará si el disco está completamente sin uso. Si ya tiene formato/partición, se saltará.
-# Esto previene modificaciones en discos ya preparados (o en el caso de storage1, que pudo ser configurado via LVM).
+# Es compatible con Flatcar Linux (sin Python), usando comandos raw.
 
-- name: Verificar presencia de /dev/vdb
-  ansible.builtin.stat:
-    path: /dev/vdb
-  register: longhorn_dev
-  become: yes
+- name: 🧪 Verificar existencia del disco /dev/vdb
+  raw: test -b /dev/vdb
+  register: disk_check
+  failed_when: disk_check.rc != 0
+  changed_when: false
 
-- name: Abortar si /dev/vdb no existe
-  ansible.builtin.fail:
-    msg: "ERROR: No se encontró /dev/vdb en {{ inventory_hostname }}. Se requiere un disco adicional para Longhorn."
-  when: not longhorn_dev.stat.exists or (longhorn_dev.stat.exists and longhorn_dev.stat.isblk is not defined)
+- name: 🧪 Verificar si /dev/vdb tiene particiones
+  raw: lsblk -n /dev/vdb | wc -l
+  register: vdb_parts
+  changed_when: false
 
-- name: Comprobar si /dev/vdb tiene particiones
-  ansible.builtin.set_fact:
-    longhorn_partitions: "{{ ansible_devices['vdb'].partitions if ansible_devices['vdb'] is defined else {} }}"
-
-- name: Comprobar si /dev/vdb tiene sistema de archivos
-  ansible.builtin.command: blkid -o value -s TYPE /dev/vdb
-  register: longhorn_fs
+- name: 🧪 Verificar si /dev/vdb tiene sistema de archivos
+  raw: blkid -o value -s TYPE /dev/vdb || true
+  register: fs_check
   changed_when: false
   failed_when: false
 
-- name: Determinar si es necesario preparar /dev/vdb
-  ansible.builtin.set_fact:
-    prepare_longhorn: true
+- name: 📦 Formatear /dev/vdb si está vacío (sin particiones, sin FS)
+  raw: mkfs.ext4 /dev/vdb
   when:
-    - longhorn_partitions | length == 0      # sin particiones
-    - longhorn_fs.stdout == ""              # sin tipo de FS (no formateado)
-    - "'/dev/vdb' not in (ansible_mounts | map(attribute='device') | list)"  # no montado
+    - vdb_parts.stdout|int <= 1
+    - fs_check.stdout == ""
 
-- name: Omitir preparación de Longhorn (disco ya formateado o montado)
-  ansible.builtin.debug:
-    msg: "Omitiendo preparación de /dev/vdb en {{ inventory_hostname }}: el disco ya está formateado, particionado o montado."
-  when: prepare_longhorn is not defined
+- name: 📁 Crear punto de montaje /mnt/longhorn-disk
+  raw: mkdir -p /mnt/longhorn-disk
+  changed_when: false
 
-- name: Formatear /dev/vdb para Longhorn (ext4)
-  community.general.filesystem:
-    fstype: ext4
-    dev: /dev/vdb
-  when: prepare_longhorn | default(false) | bool
+- name: 🔗 Añadir a /etc/fstab
+  raw: grep -q "/mnt/longhorn-disk" /etc/fstab || echo "/dev/vdb /mnt/longhorn-disk ext4 defaults 0 0" >> /etc/fstab
+  changed_when: false
 
-- name: Crear punto de montaje /mnt/longhorn-disk
-  ansible.builtin.file:
-    path: /mnt/longhorn-disk
-    state: directory
-    mode: '0775'
-  when: prepare_longhorn | default(false) | bool
-
-- name: Montar disco Longhorn en /mnt/longhorn-disk
-  ansible.posix.mount:
-    src: /dev/vdb
-    path: /mnt/longhorn-disk
-    fstype: ext4
-    state: mounted
-  when: prepare_longhorn | default(false) | bool
+- name: 📂 Montar disco /dev/vdb en /mnt/longhorn-disk
+  raw: mount /mnt/longhorn-disk
+  changed_when: false
