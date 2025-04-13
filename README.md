@@ -115,7 +115,7 @@ Desde Longhorn, compruebe que los nodos usan `/mnt/longhorn-disk` como almacenam
 Si necesitas reiniciar desde cero el nodo `storage` (por ejemplo, para reprovisionarlo sin destruir la VM), puedes ejecutar:
 
 ```bash
-ansible-playbook playbooks/playbook_cleanup.yml -e confirm_cleanup=yes
+sudo ansible-playbook playbooks/playbook_cleanup.yml -e confirm_cleanup=yes
 ```
 
 Este playbook:
