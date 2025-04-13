@@ -16,6 +16,14 @@
         success_msg: "✅ Confirmación recibida. Iniciando limpieza del nodo {{ inventory_hostname }}..."
 
   tasks:
+  - name: Verificar que el disco a limpiar sea /dev/vdb
+    ansible.builtin.assert:
+      that:
+        - "'/dev/vdb' in item"
+      fail_msg: "⚠️ ERROR: Solo se permite limpiar /dev/vdb. Revisa el disco objetivo."
+    loop:
+      - /dev/vdb1
+      
     - name: Detener servicio NFS (si está presente)
       ansible.builtin.service:
         name: nfs-server
