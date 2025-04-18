@@ -1,4 +1,3 @@
----
 # roles/storage_setup/tasks/main.yml
 # Este rol prepara el disco de datos adicional (/dev/vdb) en nodos de almacenamiento.
 # Usa solo tareas raw para compatibilidad con sistemas sin Python (ej. Flatcar Linux)

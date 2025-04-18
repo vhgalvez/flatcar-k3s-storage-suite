@@ -1,6 +1,6 @@
 ---
 # Ruta: playbooks/install_longhorn.yml
-# 🚀 Instalar Longhorn en el clúster Kubernetes y etiquetar nodos worker (modo raw)
+# 🚀 Instala Longhorn en el clúster Kubernetes y etiqueta nodos worker (modo raw)
 
 - name: 🚀 Instalar Longhorn y etiquetar nodos worker
   hosts: master1

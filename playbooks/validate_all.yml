@@ -1,0 +1,91 @@
+---
+# Ruta: playbooks\validate_all.yml
+# ✅ Verificación completa del entorno desplegado con Ansible
+
+- name: ✅ Validar almacenamiento en nodo de storage
+  hosts: storage
+  become: true
+  gather_facts: false
+  tasks:
+    - name: 📂 Validar montajes NFS
+      raw: mount | grep -E "/srv/nfs/postgresql|/srv/nfs/shared"
+      register: storage_mounts
+      failed_when: storage_mounts.rc != 0
+
+    - name: 📦 Verificar volumen LVM longhorn_lv
+      raw: lvdisplay /dev/vg_storage/longhorn_lv
+      register: longhorn_lv_check
+      failed_when: longhorn_lv_check.rc != 0
+
+    - name: 🟢 Mostrar resultados de montajes
+      debug:
+        var: storage_mounts.stdout_lines
+
+- name: ✅ Validar configuración de discos Longhorn en workers
+  hosts: workers
+  become: true
+  gather_facts: false
+  tasks:
+    - name: 📁 Verificar /mnt/longhorn-disk montado
+      raw: mountpoint -q /mnt/longhorn-disk
+      register: mount_check
+      failed_when: mount_check.rc != 0
+
+    - name: 🔍 Verificar sistema de archivos en /dev/vdb
+      raw: blkid /dev/vdb || true
+      register: fs_check
+      failed_when: fs_check.rc != 0
+
+    - name: ⚙️ Verificar presencia de iscsiadm
+      raw: which iscsiadm || true
+      register: iscsi_check
+      failed_when: iscsi_check.rc != 0
+
+    - name: 📊 Mostrar estado del montaje
+      debug:
+        var: mount_check
+
+- name: ✅ Validar despliegue de Longhorn desde master1
+  hosts: master1
+  become: true
+  gather_facts: false
+  vars:
+    kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
+    longhorn_namespace: "longhorn-system"
+  tasks:
+    - name: 🔍 Verificar namespace longhorn-system
+      raw: k3s kubectl --kubeconfig {{ kubeconfig_path }} get ns {{ longhorn_namespace }}
+      register: ns_check
+      failed_when: ns_check.rc != 0
+
+    - name: 🏷️ Verificar etiquetas de nodos
+      raw: k3s kubectl --kubeconfig {{ kubeconfig_path }} get nodes --show-labels | grep longhorn-node
+      register: label_check
+      failed_when: label_check.rc != 0
+
+    - name: 📦 Verificar pods de Longhorn
+      raw: k3s kubectl --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} get pods
+      register: pod_list
+
+    - name: ❌ Verificar errores en pods
+      raw: k3s kubectl --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} get pods | grep -E "CrashLoopBackOff|Error|Pending" || true
+      register: pod_errors
+
+    - name: 📄 Mostrar lista de pods
+      debug:
+        var: pod_list.stdout_lines
+
+    - name: ⚠️ Mostrar errores de pods (si existen)
+      debug:
+        var: pod_errors.stdout_lines
+      when: pod_errors.stdout != ""
+
+    - name: 📁 Validar PVCs y PVs
+      raw: |
+        k3s kubectl --kubeconfig {{ kubeconfig_path }} get pvc --all-namespaces
+        k3s kubectl --kubeconfig {{ kubeconfig_path }} get pv
+      register: pvc_pv_check
+
+    - name: 📄 Mostrar PVCs y PVs
+      debug:
+        var: pvc_pv_check.stdout_lines

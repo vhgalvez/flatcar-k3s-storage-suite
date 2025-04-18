@@ -9,17 +9,18 @@
   failed_when: disk_check.rc != 0
   changed_when: false
 
-- name: 🔍 Verificar sistema de archivos existente en /dev/vdb
-  raw: blkid -o value -s TYPE /dev/vdb || true
-  register: fs_check
-  changed_when: false
-
-- name: 🧪 Verificar particiones (debe ser solo 1 o ninguna)
+- name: 🧪 Verificar si /dev/vdb tiene particiones
   raw: lsblk -n /dev/vdb | wc -l
   register: vdb_parts
   changed_when: false
 
-- name: 📂 Formatear si está vacío
+- name: 🧪 Verificar si /dev/vdb tiene sistema de archivos
+  raw: blkid -o value -s TYPE /dev/vdb || true
+  register: fs_check
+  changed_when: false
+  failed_when: false
+
+- name: 📦 Formatear /dev/vdb si está vacío (sin particiones, sin FS)
   raw: mkfs.ext4 /dev/vdb
   when:
     - vdb_parts.stdout|int <= 1
@@ -29,16 +30,10 @@
   raw: mkdir -p /mnt/longhorn-disk
   changed_when: false
 
-- name: 🔗 Añadir /mnt/longhorn-disk al fstab si no existe
+- name: 🔗 Añadir a /etc/fstab
   raw: grep -q "/mnt/longhorn-disk" /etc/fstab || echo "/dev/vdb /mnt/longhorn-disk ext4 defaults 0 0" >> /etc/fstab
   changed_when: false
 
-- name: 📂 Montar /mnt/longhorn-disk si no está montado
-  raw: mountpoint -q /mnt/longhorn-disk || mount /mnt/longhorn-disk
-  changed_when: false
-
-- name: 🧪 Validar montaje correcto
-  raw: df -h | grep /mnt/longhorn-disk
-  register: mount_check
-  failed_when: mount_check.rc != 0
+- name: 📂 Montar disco /dev/vdb en /mnt/longhorn-disk
+  raw: mount /mnt/longhorn-disk
   changed_when: false

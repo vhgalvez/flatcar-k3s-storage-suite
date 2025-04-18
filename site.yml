@@ -19,3 +19,6 @@
 
 - name: 🚀 Instalar Longhorn (incluye etiquetado de nodos desde master1)
   import_playbook: playbooks/install_longhorn.yml
+
+- name: ✅ Validar instalación y configuración de Longhorn y nodos
+  import_playbook: playbooks/validate_all.yml
