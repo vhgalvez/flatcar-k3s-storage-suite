@@ -1,4 +1,5 @@
 # Ruta: playbooks/install_longhorn.yml
+---
 # 🚀 Instalar Longhorn usando Helm en el clúster Kubernetes y etiquetar nodos worker
 
 - name: 🚀 Instalar Longhorn usando Helm

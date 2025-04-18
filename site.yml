@@ -1,5 +1,5 @@
----
 # Ruta: site.yml
+---
 # 🧩 Playbook maestro para configurar almacenamiento persistente en Flatcar + K3s
 # Incluye: LVM, NFS, Longhorn (con etiquetado de nodos integrado)
 
