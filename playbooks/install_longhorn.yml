@@ -1,74 +1,43 @@
 # Ruta: playbooks/install_longhorn.yml
-# 🚀 Instalar Longhorn en el clúster Kubernetes y etiquetar nodos worker (modo raw)
+# 🚀 Instalar Longhorn usando Helm en el clúster Kubernetes y etiquetar nodos worker
 
-- name: 🚀 Instalar Longhorn y etiquetar nodos worker
-  hosts: masters  # Ejecutar sólo en los nodos maestros
+- name: 🚀 Instalar Longhorn usando Helm
+  hosts: masters  # Ejecutar solo en los nodos maestros
   gather_facts: false
   become: true
 
   vars:
-    kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
     longhorn_namespace: "longhorn-system"
-    longhorn_manifest_url: "https://raw.githubusercontent.com/longhorn/longhorn/v1.6.1/deploy/longhorn.yaml"
 
   tasks:
-    # Verificar que los nodos worker1, worker2 y worker3 existan
-    - name: 🔍 Verificar que los nodos worker1, worker2 y worker3 existen
-      raw: |
-        k3s kubectl --kubeconfig {{ kubeconfig_path }} get nodes | grep -E "worker1|worker2|worker3"
-      register: node_check
-      failed_when: node_check.rc != 0
-      changed_when: false
+    # Añadir el repositorio de Helm para Longhorn
+    - name: Añadir repositorio Helm de Longhorn
+      shell: |
+        helm repo add longhorn https://charts.longhorn.io
+        helm repo update
+      register: helm_repo
 
-    # Etiquetar worker1
-    - name: 🏷️ worker1 - Etiqueta como longhorn-node
-      raw: |
-        k3s kubectl label node worker1.cefaslocalserver.com longhorn-node=true --overwrite
-
-    # Etiquetar worker2
-    - name: 🏷️ worker2 - Etiqueta como longhorn-node
-      raw: |
-        k3s kubectl label node worker2.cefaslocalserver.com longhorn-node=true --overwrite
-
-    # Etiquetar worker3
-    - name: 🏷️ worker3 - Etiqueta como longhorn-node
-      raw: |
-        k3s kubectl label node worker3.cefaslocalserver.com longhorn-node=true --overwrite
-
-    # Verificar si el namespace longhorn-system ya existe
-    - name: 🔍 Verificar si el namespace {{ longhorn_namespace }} ya existe
-      raw: |
-        sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} get ns {{ longhorn_namespace }}
-      register: ns_check
-      failed_when: false
-      changed_when: false
-
-    # Crear namespace para Longhorn si no existe
-    - name: 📦 Crear namespace para Longhorn si no existe
-      raw: |
-        sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} create ns {{ longhorn_namespace }}
-      when: ns_check.rc != 0
-
-    # Aplicar manifiesto de instalación de Longhorn
-    - name: 📥 Aplicar manifiesto de instalación de Longhorn
-      raw: |
-        sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} apply -f {{ longhorn_manifest_url }}
-      register: apply_longhorn
+    # Instalar Longhorn usando Helm
+    - name: Instalar Longhorn usando Helm
+      shell: |
+        helm install longhorn longhorn/longhorn --namespace {{ longhorn_namespace }} --create-namespace
+      register: longhorn_install
+      failed_when: longhorn_install.rc != 0
 
     # Esperar a que los pods de Longhorn estén listos (máx 5 minutos)
-    - name: ⏳ Esperar a que los pods de Longhorn estén listos (máx 5 minutos)
-      raw: |
-        sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} wait --for=condition=Ready pod --all --timeout=300s
+    - name: Esperar a que los pods de Longhorn estén listos (máx 5 minutos)
+      shell: |
+        kubectl --namespace {{ longhorn_namespace }} wait --for=condition=Ready pod --all --timeout=300s
       register: wait_longhorn
       failed_when: wait_longhorn.rc != 0
 
-    # Mostrar estado final de los pods Longhorn
-    - name: 📊 Mostrar estado final de los pods Longhorn
-      raw: |
-        sudo k3s kubectl --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} get pods
+    # Mostrar estado final de los pods de Longhorn
+    - name: Mostrar estado final de los pods de Longhorn
+      shell: |
+        kubectl --namespace {{ longhorn_namespace }} get pods
       register: longhorn_pods
 
-    # Imprimir lista de pods Longhorn
-    - name: 📋 Imprimir lista de pods Longhorn
+    # Imprimir lista de los pods Longhorn
+    - name: Imprimir lista de pods Longhorn
       debug:
         var: longhorn_pods.stdout_lines

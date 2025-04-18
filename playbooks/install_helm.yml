@@ -1,0 +1,45 @@
+# Ruta: playbooks/install_helm.yml
+# 🚀 Instalar Helm versión v3.14.0 en los nodos del clúster
+
+- name: 🚀 Instalar Helm versión 3.14.0
+  hosts: all
+  become: true
+  gather_facts: false
+
+  vars:
+    helm_version: "v3.14.0"
+
+  tasks:
+    # Descargar Helm
+    - name: Descargar Helm v3.14.0
+      shell: |
+        wget https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz -O /tmp/helm-{{ helm_version }}-linux-amd64.tar.gz
+      register: download_helm
+      failed_when: download_helm.rc != 0
+      changed_when: false
+
+    # Extraer el archivo descargado
+    - name: Extraer archivo de Helm
+      unarchive:
+        src: /tmp/helm-{{ helm_version }}-linux-amd64.tar.gz
+        dest: /tmp/
+        remote_src: yes
+        creates: /tmp/linux-amd64/helm
+      register: extract_helm
+
+    # Mover el binario de Helm a la ubicación adecuada
+    - name: Mover Helm al directorio bin
+      command: mv /tmp/linux-amd64/helm /usr/local/bin/helm
+      register: move_helm
+      failed_when: move_helm.rc != 0
+      changed_when: false
+
+    # Verificar que Helm se haya instalado correctamente
+    - name: Verificar instalación de Helm
+      shell: helm version --short
+      register: helm_version_output
+      failed_when: helm_version_output.rc != 0
+
+    - name: Imprimir versión de Helm instalada
+      debug:
+        var: helm_version_output.stdout
