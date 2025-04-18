@@ -1,8 +1,8 @@
-# playbooks/install_longhorn.yml
+# Ruta: playbooks/install_longhorn.yml
 # 🚀 Instalar Longhorn en el clúster Kubernetes y etiquetar nodos worker (modo raw)
 
 - name: 🚀 Instalar Longhorn y etiquetar nodos worker
-  hosts: masters
+  hosts: masters  # Ejecutar sólo en los nodos maestros
   gather_facts: false
   become: true
 
@@ -12,7 +12,7 @@
     longhorn_manifest_url: "https://raw.githubusercontent.com/longhorn/longhorn/v1.6.1/deploy/longhorn.yaml"
 
   tasks:
-    # Verificar que los nodos worker existan
+    # Verificar que los nodos worker1, worker2 y worker3 existan
     - name: 🔍 Verificar que los nodos worker1, worker2 y worker3 existen
       raw: |
         k3s kubectl --kubeconfig {{ kubeconfig_path }} get nodes | grep -E "worker1|worker2|worker3"
