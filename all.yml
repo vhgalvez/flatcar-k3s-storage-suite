@@ -1,0 +1,8 @@
+# 📦 group_vars/all.yml
+
+# Variables globales para todos los playbooks y roles del stack de monitoreo (Prometheus + Grafana + Node Exporter)
+
+# ─────────────────────────────────────────────
+# 🛠️ Variables de entorno para Helm y kubectl
+grafana_env:
+  PATH: "/usr/local/bin:/usr/bin:/bin"  # PATH extendido para Helm/kubectl desde Ansible
