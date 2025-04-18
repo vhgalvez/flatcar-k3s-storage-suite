@@ -14,8 +14,8 @@
   roles:
     - role: longhorn_worker
 
-# Instalar Helm antes de continuar con la instalación de Longhorn
-- name: 🚀 Instalar Helm
+# Instalar herramientas (kubectl, helm) en el nodo controlador
+- name: 🚀 Instalar herramientas locales
   import_playbook: playbooks/01_install_local_tools.yml
 
 - name: 🚀 Instalar Longhorn (incluye etiquetado de nodos desde master1)
