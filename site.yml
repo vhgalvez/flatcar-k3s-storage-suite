@@ -1,8 +1,5 @@
 # Ruta: site.yml
 ---
-# 🧩 Playbook maestro para configurar almacenamiento persistente en Flatcar + K3s
-# Incluye: LVM, NFS, Longhorn (con etiquetado de nodos integrado)
-
 - name: 📦 Preparar disco de almacenamiento con LVM y exportar NFS
   hosts: storage
   become: true
@@ -19,7 +16,7 @@
 
 # Instalar Helm antes de continuar con la instalación de Longhorn
 - name: 🚀 Instalar Helm
-  import_playbook: playbooks/install_helm.yml
+  import_playbook: playbooks/01_install_local_tools.yml
 
 - name: 🚀 Instalar Longhorn (incluye etiquetado de nodos desde master1)
   import_playbook: playbooks/install_longhorn.yml
