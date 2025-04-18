@@ -21,3 +21,17 @@ lsblk
 sudo pvscan
 sudo vgscan
 sudo lvscan
+
+
+kubectl get pods -n longhorn-system
+kubectl get svc -n longhorn-system
+kubectl get pv
+kubectl get pvc
+
+sudo lvremove -y /dev/vg_storage/postgres_lv
+sudo lvremove -y /dev/vg_storage/shared_lv
+sudo lvremove -y /dev/vg_storage/longhorn_lv
+sudo vgremove -y vg_storage
+sudo pvremove -y /dev/vdb1
+
+sudo parted /dev/vdb rm 1
