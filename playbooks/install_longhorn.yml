@@ -3,7 +3,7 @@
 # 🚀 Instalar Longhorn en el clúster Kubernetes y etiquetar nodos worker (modo raw)
 
 - name: 🚀 Instalar Longhorn y etiquetar nodos worker
-  hosts: master1
+  hosts: masters
   gather_facts: false
   become: true
 
