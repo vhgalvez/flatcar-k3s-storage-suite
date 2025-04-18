@@ -1,4 +1,4 @@
-# Ruta: site.yml
+# site.yml
 ---
 - name: 📦 Preparar disco de almacenamiento con LVM y exportar NFS
   hosts: storage
@@ -14,9 +14,11 @@
   roles:
     - role: longhorn_worker
 
-# Instalar herramientas (kubectl, helm) en el nodo controlador
 - name: 🚀 Instalar herramientas locales
   import_playbook: playbooks/01_install_local_tools.yml
+
+- name: 🚀 Configurar kubeconfig
+  import_playbook: playbooks/02_setup_kubeconfig.yml
 
 - name: 🚀 Instalar Longhorn (incluye etiquetado de nodos desde master1)
   import_playbook: playbooks/install_longhorn.yml
