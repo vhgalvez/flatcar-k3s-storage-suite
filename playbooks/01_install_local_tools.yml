@@ -5,9 +5,6 @@
   vars:
     kubectl_version: "v1.29.0"
     kubectl_path: "/usr/local/bin/kubectl"
-    helm_version: "v3.14.0"
-    helm_install_path: "/tmp/helm_install"
-    helm_bin: "/usr/local/bin/helm"
 
   tasks:
     # Instalar paquetes base (pip, git, curl)
@@ -49,53 +46,3 @@
     - name: 📊 Mostrar salida de kubectl
       debug:
         msg: "{{ kubectl_output.stdout | default('kubectl no disponible') }}"
-
-    # Crear directorio temporal para Helm
-    - name: 📁 Crear directorio temporal para Helm
-      file:
-        path: "{{ helm_install_path }}"
-        state: directory
-
-    # Descargar Helm {{ helm_version }}
-    - name: 📥 Descargar Helm {{ helm_version }}
-      get_url:
-        url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
-        dest: "{{ helm_install_path }}/helm.tar.gz"
-
-    # Extraer Helm
-    - name: 📦 Extraer Helm
-      unarchive:
-        src: "{{ helm_install_path }}/helm.tar.gz"
-        dest: "{{ helm_install_path }}"
-        remote_src: yes
-
-    # Verificar existencia del binario Helm
-    - name: 🗂 Verificar existencia del binario Helm
-      stat:
-        path: "{{ helm_install_path }}/linux-amd64/helm"
-      register: helm_bin_check
-
-    # Mover Helm a {{ helm_bin }}
-    - name: ✅ Mover Helm a {{ helm_bin }}
-      copy:
-        src: "{{ helm_install_path }}/linux-amd64/helm"
-        dest: "{{ helm_bin }}"
-        mode: '0755'
-        remote_src: yes
-      when: helm_bin_check.stat.exists
-
-    # Verificar versión de Helm
-    - name: 🧪 Verificar versión de Helm
-      command: "{{ helm_bin }} version"
-      register: helm_output
-
-    # Mostrar salida de Helm
-    - name: 📊 Mostrar salida de Helm
-      debug:
-        msg: "{{ helm_output.stdout | default('Helm no disponible') }}"
-
-    # Limpiar archivos temporales de Helm
-    - name: 🧹 Limpiar archivos temporales de Helm
-      file:
-        path: "{{ helm_install_path }}"
-        state: absent

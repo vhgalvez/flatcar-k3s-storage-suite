@@ -1,0 +1,54 @@
+# playbook/install_helm.yml
+- name: 🚀 Instalar Helm versión 3.14.0 en el nodo controlador
+  hosts: controller
+  become: true
+  gather_facts: true
+
+  vars:
+    helm_version: "v3.14.0"
+    helm_install_path: "/tmp/helm_install"
+    helm_bin: "/usr/local/bin/helm"
+
+  tasks:
+
+    - name: 📁 Crear directorio temporal para Helm
+      file:
+        path: "{{ helm_install_path }}"
+        state: directory
+
+    - name: 📥 Descargar Helm {{ helm_version }}
+      get_url:
+        url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        dest: "{{ helm_install_path }}/helm.tar.gz"
+
+    - name: 📦 Extraer Helm
+      unarchive:
+        src: "{{ helm_install_path }}/helm.tar.gz"
+        dest: "{{ helm_install_path }}"
+        remote_src: yes
+
+    - name: 🗂 Verificar existencia del binario Helm
+      stat:
+        path: "{{ helm_install_path }}/linux-amd64/helm"
+      register: helm_bin_check
+
+    - name: ✅ Mover Helm a {{ helm_bin }}
+      copy:
+        src: "{{ helm_install_path }}/linux-amd64/helm"
+        dest: "{{ helm_bin }}"
+        mode: '0755'
+        remote_src: yes
+      when: helm_bin_check.stat.exists
+
+    - name: 🧪 Verificar versión de Helm
+      command: "{{ helm_bin }} version"
+      register: helm_output
+
+    - name: 📊 Mostrar salida de Helm
+      debug:
+        msg: "{{ helm_output.stdout | default('Helm no disponible') }}"
+
+    - name: 🧹 Limpiar archivos temporales de Helm
+      file:
+        path: "{{ helm_install_path }}"
+        state: absent
