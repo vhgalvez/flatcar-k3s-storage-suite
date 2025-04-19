@@ -70,6 +70,18 @@
       changed_when: false
       ignore_errors: true
 
+    # 🧹 Limpiar recursos de Longhorn (tanto en storage como en workers)
+    - name: 🚫 Eliminar recursos de Longhorn (nodos storage y workers)
+      ansible.builtin.raw: |
+        kubectl delete pvc --all --namespace longhorn-system || true
+        kubectl delete pv --all --namespace longhorn-system || true
+        kubectl delete pod --all --namespace longhorn-system || true
+        kubectl delete deployment longhorn --namespace longhorn-system || true
+        kubectl delete statefulset longhorn --namespace longhorn-system || true
+        kubectl delete priorityclass longhorn-critical || true
+      changed_when: false
+      ignore_errors: true
+
     - name: ✅ Mensaje final
       ansible.builtin.debug:
         msg: "✅ Limpieza completada en {{ inventory_hostname }}. Reinicie el nodo si es necesario."
