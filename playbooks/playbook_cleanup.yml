@@ -1,4 +1,4 @@
-- name: ♻️ Limpiar configuración de almacenamiento en nodos de storage y workers
+- name: ♻️ Limpiar configuración de almacenamiento en nodos de storage, workers y controller
   hosts: storage,workers,controller
   become: true
   gather_facts: false
@@ -13,28 +13,43 @@
 
   tasks:
 
-    # -----------------------
-    # 1️⃣ Limpieza en controller
-    # -----------------------
-    - name: 🗑️ Eliminar release de Helm de Longhorn (si existe)
+    # ------------------------------
+    # 1️⃣ Limpieza en el controller (K8s y Helm)
+    # ------------------------------
+    - name: 🗑️ Eliminar release de Helm de Longhorn
       ansible.builtin.raw: |
         helm uninstall longhorn --namespace longhorn-system || true
+      when: "'controller' in group_names"
+
+    - name: 🧼 Eliminar el namespace completo (longhorn-system)
+      ansible.builtin.raw: |
         kubectl delete namespace longhorn-system --ignore-not-found || true
       when: "'controller' in group_names"
 
-    - name: 🧹 Limpiar secretos de Helm
+    - name: 🧹 Eliminar secrets de Helm relacionados con Longhorn
       ansible.builtin.raw: |
         kubectl delete secret -n longhorn-system -l "owner=helm,name=longhorn" || true
       when: "'controller' in group_names"
 
-    - name: 🧨 Eliminar CustomResourceDefinitions de Longhorn
+    - name: 🧨 Eliminar CustomResourceDefinitions (CRDs) de Longhorn
       ansible.builtin.raw: |
         kubectl delete crd -l app.kubernetes.io/name=longhorn || true
       when: "'controller' in group_names"
 
-    # -----------------------
-    # 2️⃣ Limpieza en storage
-    # -----------------------
+    - name: 🔐 Eliminar ServiceAccounts y ConfigMaps residuales
+      ansible.builtin.raw: |
+        kubectl delete serviceaccount longhorn-service-account -n longhorn-system --ignore-not-found || true
+        kubectl delete configmap -n longhorn-system --all || true
+      when: "'controller' in group_names"
+
+    - name: 🛑 Forzar limpieza de finalizers (si existen stuck namespaces o CRDs)
+      ansible.builtin.raw: |
+        kubectl get namespace longhorn-system -o json | jq 'del(.spec.finalizers)' | kubectl replace --raw "/api/v1/namespaces/longhorn-system/finalize" -f - || true
+      when: "'controller' in group_names"
+
+    # ------------------------------
+    # 2️⃣ Limpieza de almacenamiento en storage
+    # ------------------------------
     - name: 🔌 Desmontar volúmenes montados
       ansible.builtin.raw: |
         umount -f /srv/nfs/postgresql || true
@@ -43,7 +58,7 @@
       changed_when: false
       ignore_errors: true
 
-    - name: 🛑 Detener servicio NFS (solo en storage)
+    - name: 🛑 Detener y deshabilitar NFS
       ansible.builtin.raw: |
         systemctl stop nfs-server || rc-service nfs stop || true
         systemctl disable nfs-server || true
@@ -61,24 +76,27 @@
         vgremove -y vg_storage || true
       when: "'storage' in group_names"
 
-    - name: 💣 Borrar firma LVM del disco /dev/vdb1
+    - name: 💣 Borrar firma LVM
       ansible.builtin.raw: |
         pvremove -y /dev/vdb1 || true
       when: "'storage' in group_names"
 
-    - name: 🚫 Borrar tabla de partición /dev/vdb
+    - name: 🚫 Borrar tabla de partición
       ansible.builtin.raw: |
         parted /dev/vdb rm 1 || true
       when: "'storage' in group_names"
 
-    # -----------------------
-    # 3️⃣ Limpieza en workers
-    # -----------------------
+    # ------------------------------
+    # 3️⃣ Limpieza de discos en workers
+    # ------------------------------
     - name: 🧹 Borrar sistema de archivos en /dev/vdb
       ansible.builtin.raw: |
         wipefs -a /dev/vdb || true
       when: "'workers' in group_names"
 
-    - name: ✅ Mensaje final
+    # ------------------------------
+    # ✅ Mensaje final por nodo
+    # ------------------------------
+    - name: ✅ Confirmación final por nodo
       ansible.builtin.debug:
-        msg: "✅ Limpieza completada en {{ inventory_hostname }}. Reinicie el nodo si es necesario."
+        msg: "✅ Limpieza completa finalizada en {{ inventory_hostname }}. Puedes reiniciar el nodo si deseas."
