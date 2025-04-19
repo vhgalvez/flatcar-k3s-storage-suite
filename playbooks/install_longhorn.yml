@@ -1,29 +1,29 @@
+# playbooks\install_longhorn.yml
 - name: Instalar Longhorn usando Helm
-  hosts: controller  # Cambiar "masters" a "controller" (o el nodo donde tienes helm instalado)
+  hosts: controller
   gather_facts: false
   become: true
   vars:
     longhorn_namespace: "longhorn-system"
-    kubeconfig_path: "/home/victory/.kube/config"  # Ruta correcta del kubeconfig
+    kubeconfig_path: "/home/victory/.kube/config"
 
   tasks:
-    # Añadir el repositorio de Helm para Longhorn
     - name: Añadir repositorio Helm de Longhorn
       raw: |
         export KUBECONFIG={{ kubeconfig_path }}
+        export PATH=$PATH:/usr/local/bin  # Aseguramos que Helm esté en el PATH
         helm repo add longhorn https://charts.longhorn.io
         helm repo update
       register: helm_repo
 
-    # Instalar Longhorn usando Helm
     - name: Instalar Longhorn usando Helm
       raw: |
         export KUBECONFIG={{ kubeconfig_path }}
+        export PATH=$PATH:/usr/local/bin  # Aseguramos que Helm esté en el PATH
         helm install longhorn longhorn/longhorn --namespace {{ longhorn_namespace }} --create-namespace
       register: longhorn_install
       failed_when: longhorn_install.rc != 0
 
-    # Esperar a que los pods de Longhorn estén listos (máx 5 minutos)
     - name: Esperar a que los pods de Longhorn estén listos (máx 5 minutos)
       raw: |
         export KUBECONFIG={{ kubeconfig_path }}
@@ -31,14 +31,12 @@
       register: wait_longhorn
       failed_when: wait_longhorn.rc != 0
 
-    # Mostrar estado final de los pods de Longhorn
     - name: Mostrar estado final de los pods de Longhorn
       raw: |
         export KUBECONFIG={{ kubeconfig_path }}
         kubectl --namespace {{ longhorn_namespace }} get pods
       register: longhorn_pods
 
-    # Imprimir lista de los pods Longhorn
     - name: Imprimir lista de pods Longhorn
       debug:
         var: longhorn_pods.stdout_lines
