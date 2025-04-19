@@ -1,3 +1,6 @@
+# playbooks/playbook_cleanup.yml
+# ♻️ Limpia TODO el rastro de Longhorn y almacenamiento
+
 - name: ♻️ Limpiar configuración de almacenamiento en nodos de storage, workers y controller
   hosts: storage,workers,controller
   become: true
@@ -16,7 +19,7 @@
 
   tasks:
     # ------------------------------
-    # 1️⃣ Limpieza en el controller (K8s y Helm)
+    # 1️⃣ Limpieza en el controller (Helm + Kubernetes)
     # ------------------------------
     - name: 🧼 Eliminar Helm repo longhorn (opcional)
       ansible.builtin.raw: |
@@ -29,6 +32,11 @@
         export PATH=$PATH:/usr/local/bin
         export KUBECONFIG={{ kubeconfig_path }}
         helm uninstall longhorn --namespace longhorn-system || true
+      when: "'controller' in group_names"
+
+    - name: ⏳ Pausa para asegurar liberación de recursos
+      pause:
+        seconds: 5
       when: "'controller' in group_names"
 
     - name: 🧼 Eliminar namespace longhorn-system
@@ -68,26 +76,31 @@
         kubectl replace --raw "/api/v1/namespaces/longhorn-system/finalize" -f - || true
       when: "'controller' in group_names"
 
+    - name: ⏳ Espera antes de verificar recursos (5s)
+      pause:
+        seconds: 5
+      when: "'controller' in group_names"
+
     - name: 🔎 Verificar limpieza de namespace y recursos
       ansible.builtin.raw: |
         export PATH=$PATH:/usr/local/bin
         export KUBECONFIG={{ kubeconfig_path }}
-        echo "🔍 Comprobando existencia del namespace..."
+        echo "🔍 Verificando namespace:"
         kubectl get namespace longhorn-system || echo "✅ Namespace eliminado"
-        echo "🔍 Verificando CRDs..."
+        echo "🔍 Verificando CRDs:"
         kubectl get crd | grep longhorn || echo "✅ CRDs eliminados"
-        echo "🔍 Verificando pods y recursos restantes..."
+        echo "🔍 Verificando recursos activos:"
         kubectl get all -A | grep longhorn || echo "✅ Sin recursos activos"
       register: longhorn_cleanup_status
       when: "'controller' in group_names"
 
     - name: 📋 Mostrar resultados de la limpieza
-      ansible.builtin.debug:
+      debug:
         var: longhorn_cleanup_status.stdout_lines
       when: "'controller' in group_names"
 
     # ------------------------------
-    # 2️⃣ Limpieza almacenamiento en storage
+    # 2️⃣ Limpieza de almacenamiento en storage
     # ------------------------------
     - name: 🔌 Desmontar volúmenes montados
       ansible.builtin.raw: |
@@ -137,5 +150,5 @@
     # ✅ Confirmación final por nodo
     # ------------------------------
     - name: ✅ Confirmación final
-      ansible.builtin.debug:
+      debug:
         msg: "✅ Limpieza completada en {{ inventory_hostname }}. Puedes reiniciar el nodo si deseas."
