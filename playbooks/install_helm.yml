@@ -1,4 +1,3 @@
-# playbook/install_helm.yml
 - name: 🚀 Instalar Helm versión 3.14.0 en el nodo controlador
   hosts: controller
   become: true
@@ -10,27 +9,36 @@
     helm_bin: "/usr/local/bin/helm"
 
   tasks:
+    - name: 📦 Verificar si Helm ya está instalado
+      command: "{{ helm_bin }} version"
+      register: helm_version_check
+      failed_when: false
+      changed_when: false
 
-    - name: 📁 Crear directorio temporal para Helm
+    - name: 📁 Crear directorio temporal para Helm si no existe
       file:
         path: "{{ helm_install_path }}"
         state: directory
+      when: helm_version_check.rc != 0  # Solo continuar si Helm no está instalado
 
     - name: 📥 Descargar Helm {{ helm_version }}
       get_url:
         url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
         dest: "{{ helm_install_path }}/helm.tar.gz"
+      when: helm_version_check.rc != 0
 
     - name: 📦 Extraer Helm
       unarchive:
         src: "{{ helm_install_path }}/helm.tar.gz"
         dest: "{{ helm_install_path }}"
         remote_src: yes
+      when: helm_version_check.rc != 0
 
     - name: 🗂 Verificar existencia del binario Helm
       stat:
         path: "{{ helm_install_path }}/linux-amd64/helm"
       register: helm_bin_check
+      when: helm_version_check.rc != 0
 
     - name: ✅ Mover Helm a {{ helm_bin }}
       copy:
@@ -38,17 +46,19 @@
         dest: "{{ helm_bin }}"
         mode: '0755'
         remote_src: yes
-      when: helm_bin_check.stat.exists
+      when: helm_version_check.rc != 0 and helm_bin_check.stat.exists
 
     - name: 🧪 Verificar versión de Helm
       command: "{{ helm_bin }} version"
       register: helm_output
+      when: helm_version_check.rc != 0
 
     - name: 📊 Mostrar salida de Helm
       debug:
-        msg: "{{ helm_output.stdout | default('Helm no disponible') }}"
+        msg: "{{ helm_output.stdout | default('Helm ya está instalado') }}"
 
     - name: 🧹 Limpiar archivos temporales de Helm
       file:
         path: "{{ helm_install_path }}"
         state: absent
+      when: helm_version_check.rc != 0
