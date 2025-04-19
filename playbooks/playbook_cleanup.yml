@@ -73,12 +73,12 @@
     # 🧹 Limpiar recursos de Longhorn (tanto en storage como en workers)
     - name: 🚫 Eliminar recursos de Longhorn (nodos storage y workers)
       ansible.builtin.raw: |
-        kubectl delete pvc --all --namespace longhorn-system || true
-        kubectl delete pv --all --namespace longhorn-system || true
-        kubectl delete pod --all --namespace longhorn-system || true
-        kubectl delete deployment longhorn --namespace longhorn-system || true
-        kubectl delete statefulset longhorn --namespace longhorn-system || true
-        kubectl delete priorityclass longhorn-critical || true
+        kubectl delete pvc --all --namespace longhorn-system --grace-period=0 --force || true
+        kubectl delete pv --all --namespace longhorn-system --grace-period=0 --force || true
+        kubectl delete pod --all --namespace longhorn-system --grace-period=0 --force || true
+        kubectl delete deployment longhorn --namespace longhorn-system --grace-period=0 --force || true
+        kubectl delete statefulset longhorn --namespace longhorn-system --grace-period=0 --force || true
+        kubectl delete priorityclass longhorn-critical --namespace longhorn-system --grace-period=0 --force || true
       changed_when: false
       ignore_errors: true
 
