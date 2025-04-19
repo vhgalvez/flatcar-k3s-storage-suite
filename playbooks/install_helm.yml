@@ -9,6 +9,29 @@
     helm_bin: "/usr/local/bin/helm"
 
   tasks:
+    - name: Verificar si Helm está instalado
+  command: helm version
+  register: helm_version_check
+  failed_when: helm_version_check.rc != 0
+  changed_when: false
+
+- name: Instalar Longhorn usando Helm
+  when: helm_version_check.rc == 0
+  raw: |
+    helm repo add longhorn https://charts.longhorn.io
+    helm repo update
+
+- name: 🚀 Instalar Helm versión 3.14.0 en el nodo controlador
+  hosts: controller
+  become: true
+  gather_facts: true
+
+  vars:
+    helm_version: "v3.14.0"
+    helm_install_path: "/tmp/helm_install"
+    helm_bin: "/usr/local/bin/helm"
+
+  tasks:
     - name: 📦 Verificar si Helm ya está instalado
       command: "{{ helm_bin }} version"
       register: helm_version_check
