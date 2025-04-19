@@ -79,6 +79,7 @@
         kubectl delete deployment longhorn --namespace longhorn-system --grace-period=0 --force || true
         kubectl delete statefulset longhorn --namespace longhorn-system --grace-period=0 --force || true
         kubectl delete priorityclass longhorn-critical --namespace longhorn-system --grace-period=0 --force || true
+        kubectl delete serviceaccount longhorn-service-account --namespace longhorn-system --grace-period=0 --force || true
       changed_when: false
       ignore_errors: true
 
