@@ -1,154 +1,111 @@
-# playbooks/playbook_cleanup.yml
-# ♻️ Limpia TODO el rastro de Longhorn y almacenamiento
-
-- name: ♻️ Limpiar configuración de almacenamiento en nodos de storage, workers y controller
-  hosts: storage,workers,controller
+- name: ♻️ Limpieza completa de Longhorn en nodos controller, storage y workers
+  hosts: controller,storage,workers
   become: true
   gather_facts: false
-
-  pre_tasks:
-    - name: ✅ Verificación de confirmación de limpieza
-      ansible.builtin.assert:
-        that:
-          - confirm_cleanup | default(false) | bool
-        fail_msg: "❌ ERROR: Debe confirmar la limpieza con -e 'confirm_cleanup=yes'"
-        success_msg: "🧹 Confirmación recibida. Iniciando limpieza del nodo {{ inventory_hostname }}..."
 
   vars:
     kubeconfig_path: "/home/victory/.kube/config"
 
+  pre_tasks:
+    - name: ✅ Confirmación requerida
+      ansible.builtin.assert:
+        that:
+          - confirm_cleanup | default(false) | bool
+        fail_msg: "❌ ERROR: Debe confirmar con -e 'confirm_cleanup=yes'"
+        success_msg: "🧹 Confirmación recibida en {{ inventory_hostname }}"
+
   tasks:
-    # ------------------------------
-    # 1️⃣ Limpieza en el controller (Helm + Kubernetes)
-    # ------------------------------
-    - name: 🧼 Eliminar Helm repo longhorn (opcional)
-      ansible.builtin.raw: |
-        export PATH=$PATH:/usr/local/bin
-        helm repo remove longhorn || true
+
+    # -------------------- CONTROLLER --------------------
+    - name: 🔧 Instalar jq (requerido para eliminar finalizers)
+      raw: |
+        which jq || (apt-get update && apt-get install -y jq) || (yum install -y jq)
       when: "'controller' in group_names"
 
-    - name: 🗑️ Eliminar release Helm de Longhorn
-      ansible.builtin.raw: |
+    - name: 🗑️ Eliminar Helm release de Longhorn
+      raw: |
         export PATH=$PATH:/usr/local/bin
         export KUBECONFIG={{ kubeconfig_path }}
-        helm uninstall longhorn --namespace longhorn-system || true
+        helm uninstall longhorn -n longhorn-system || true
       when: "'controller' in group_names"
 
-    - name: ⏳ Pausa para asegurar liberación de recursos
-      pause:
-        seconds: 5
-      when: "'controller' in group_names"
-
-    - name: 🧼 Eliminar namespace longhorn-system
-      ansible.builtin.raw: |
-        export PATH=$PATH:/usr/local/bin
+    - name: 🧨 Eliminar TODOS los recursos del namespace
+      raw: |
         export KUBECONFIG={{ kubeconfig_path }}
-        kubectl delete namespace longhorn-system --ignore-not-found || true
+        kubectl delete all,sa,configmaps,secrets,crd,volumes,pvc,sc \
+          --all -n longhorn-system --ignore-not-found --wait=true || true
       when: "'controller' in group_names"
 
-    - name: 🔥 Eliminar secrets Helm relacionados a Longhorn
-      ansible.builtin.raw: |
-        export PATH=$PATH:/usr/local/bin
+    - name: 🚫 Forzar eliminación del namespace con finalizers (si queda bloqueado)
+      raw: |
         export KUBECONFIG={{ kubeconfig_path }}
-        kubectl delete secret -n longhorn-system -l "owner=helm" || true
-      when: "'controller' in group_names"
-
-    - name: 🧨 Eliminar CRDs de Longhorn
-      ansible.builtin.raw: |
-        export PATH=$PATH:/usr/local/bin
-        export KUBECONFIG={{ kubeconfig_path }}
-        kubectl delete crd -l app.kubernetes.io/name=longhorn || true
-      when: "'controller' in group_names"
-
-    - name: 🔐 Eliminar ServiceAccounts y ConfigMaps
-      ansible.builtin.raw: |
-        export PATH=$PATH:/usr/local/bin
-        export KUBECONFIG={{ kubeconfig_path }}
-        kubectl delete serviceaccount longhorn-service-account -n longhorn-system --ignore-not-found || true
-        kubectl delete configmap -n longhorn-system --all || true
-      when: "'controller' in group_names"
-
-    - name: 🚫 Forzar limpieza de finalizers en namespace (si stuck)
-      ansible.builtin.raw: |
-        export PATH=$PATH:/usr/local/bin
-        export KUBECONFIG={{ kubeconfig_path }}
-        kubectl get namespace longhorn-system -o json | jq 'del(.spec.finalizers)' | \
+        kubectl get namespace longhorn-system -o json | \
+        jq 'del(.spec.finalizers)' | \
         kubectl replace --raw "/api/v1/namespaces/longhorn-system/finalize" -f - || true
       when: "'controller' in group_names"
 
-    - name: ⏳ Espera antes de verificar recursos (5s)
+    - name: ⏳ Espera breve para asegurar eliminación completa
       pause:
-        seconds: 5
+        seconds: 15
       when: "'controller' in group_names"
 
-    - name: 🔎 Verificar limpieza de namespace y recursos
-      ansible.builtin.raw: |
-        export PATH=$PATH:/usr/local/bin
+    - name: 🔎 Verificar que el namespace y recursos fueron eliminados
+      raw: |
         export KUBECONFIG={{ kubeconfig_path }}
-        echo "🔍 Verificando namespace:"
-        kubectl get namespace longhorn-system || echo "✅ Namespace eliminado"
-        echo "🔍 Verificando CRDs:"
+        echo "🔍 Verificando namespace..."
+        kubectl get ns longhorn-system || echo "✅ Namespace eliminado"
+        echo "🔍 Verificando CRDs..."
         kubectl get crd | grep longhorn || echo "✅ CRDs eliminados"
-        echo "🔍 Verificando recursos activos:"
+        echo "🔍 Verificando recursos..."
         kubectl get all -A | grep longhorn || echo "✅ Sin recursos activos"
       register: longhorn_cleanup_status
       when: "'controller' in group_names"
 
-    - name: 📋 Mostrar resultados de la limpieza
+    - name: 📋 Resultado de la limpieza en controller
       debug:
         var: longhorn_cleanup_status.stdout_lines
       when: "'controller' in group_names"
 
-    # ------------------------------
-    # 2️⃣ Limpieza de almacenamiento en storage
-    # ------------------------------
-    - name: 🔌 Desmontar volúmenes montados
-      ansible.builtin.raw: |
+    # -------------------- STORAGE --------------------
+    - name: 🔌 Desmontar volúmenes NFS y Longhorn
+      raw: |
         umount -f /srv/nfs/postgresql || true
         umount -f /srv/nfs/shared || true
         umount -f /mnt/longhorn-disk || true
-      changed_when: false
       ignore_errors: true
+      when: "'storage' in group_names"
 
     - name: 🛑 Detener y deshabilitar NFS
-      ansible.builtin.raw: |
+      raw: |
         systemctl stop nfs-server || rc-service nfs stop || true
         systemctl disable nfs-server || true
       when: "'storage' in group_names"
 
     - name: 🗑️ Eliminar volúmenes lógicos
-      ansible.builtin.raw: |
+      raw: |
         lvremove -y /dev/vg_storage/postgres_lv || true
         lvremove -y /dev/vg_storage/shared_lv || true
         lvremove -y /dev/vg_storage/longhorn_lv || true
       when: "'storage' in group_names"
 
     - name: 🧨 Eliminar grupo de volúmenes
-      ansible.builtin.raw: |
+      raw: |
         vgremove -y vg_storage || true
       when: "'storage' in group_names"
 
-    - name: 💣 Borrar firma LVM
-      ansible.builtin.raw: |
+    - name: 💣 Borrar firma LVM y tabla de partición
+      raw: |
         pvremove -y /dev/vdb1 || true
-      when: "'storage' in group_names"
-
-    - name: 🚫 Borrar tabla de partición
-      ansible.builtin.raw: |
         parted /dev/vdb rm 1 || true
       when: "'storage' in group_names"
 
-    # ------------------------------
-    # 3️⃣ Limpieza en workers
-    # ------------------------------
+    # -------------------- WORKERS --------------------
     - name: 🧹 Borrar sistema de archivos en /dev/vdb
-      ansible.builtin.raw: |
+      raw: |
         wipefs -a /dev/vdb || true
       when: "'workers' in group_names"
 
-    # ------------------------------
-    # ✅ Confirmación final por nodo
-    # ------------------------------
+    # -------------------- FINAL --------------------
     - name: ✅ Confirmación final
       debug:
-        msg: "✅ Limpieza completada en {{ inventory_hostname }}. Puedes reiniciar el nodo si deseas."
+        msg: "✅ Limpieza finalizada correctamente en {{ inventory_hostname }}. Puedes reiniciar el nodo si lo deseas."
