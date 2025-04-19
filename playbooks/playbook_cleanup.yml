@@ -1,4 +1,3 @@
----
 # playbooks/playbook_cleanup.yml
 # 🔁 Limpia almacenamiento en nodos storage y workers (solo /dev/vdb).
 # ⚠️ Incluye verificación -e "confirm_cleanup=yes" para evitar accidentes.
