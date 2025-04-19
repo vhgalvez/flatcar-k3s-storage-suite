@@ -1,3 +1,4 @@
+# playbooks/playbook_cleanup.yml
 - name: ♻️ Limpiar configuración de almacenamiento en nodos de storage, workers y controller
   hosts: storage,workers,controller
   become: true
@@ -11,40 +12,67 @@
         fail_msg: "❌ ERROR: Debe confirmar la limpieza con -e 'confirm_cleanup=yes'"
         success_msg: "🧹 Confirmación recibida. Iniciando limpieza del nodo {{ inventory_hostname }}..."
 
-  tasks:
+  vars:
+    kubeconfig_path: "/home/victory/.kube/config"
 
+  tasks:
     # ------------------------------
     # 1️⃣ Limpieza en el controller (K8s y Helm)
     # ------------------------------
     - name: 🗑️ Eliminar release de Helm de Longhorn
       ansible.builtin.raw: |
+        export PATH=$PATH:/usr/local/bin
+        export KUBECONFIG={{ kubeconfig_path }}
         helm uninstall longhorn --namespace longhorn-system || true
       when: "'controller' in group_names"
 
     - name: 🧼 Eliminar el namespace completo (longhorn-system)
       ansible.builtin.raw: |
+        export PATH=$PATH:/usr/local/bin
+        export KUBECONFIG={{ kubeconfig_path }}
         kubectl delete namespace longhorn-system --ignore-not-found || true
       when: "'controller' in group_names"
 
     - name: 🧹 Eliminar secrets de Helm relacionados con Longhorn
       ansible.builtin.raw: |
+        export PATH=$PATH:/usr/local/bin
+        export KUBECONFIG={{ kubeconfig_path }}
         kubectl delete secret -n longhorn-system -l "owner=helm,name=longhorn" || true
       when: "'controller' in group_names"
 
     - name: 🧨 Eliminar CustomResourceDefinitions (CRDs) de Longhorn
       ansible.builtin.raw: |
+        export PATH=$PATH:/usr/local/bin
+        export KUBECONFIG={{ kubeconfig_path }}
         kubectl delete crd -l app.kubernetes.io/name=longhorn || true
       when: "'controller' in group_names"
 
     - name: 🔐 Eliminar ServiceAccounts y ConfigMaps residuales
       ansible.builtin.raw: |
+        export PATH=$PATH:/usr/local/bin
+        export KUBECONFIG={{ kubeconfig_path }}
         kubectl delete serviceaccount longhorn-service-account -n longhorn-system --ignore-not-found || true
         kubectl delete configmap -n longhorn-system --all || true
       when: "'controller' in group_names"
 
     - name: 🛑 Forzar limpieza de finalizers (si existen stuck namespaces o CRDs)
       ansible.builtin.raw: |
+        export PATH=$PATH:/usr/local/bin
+        export KUBECONFIG={{ kubeconfig_path }}
         kubectl get namespace longhorn-system -o json | jq 'del(.spec.finalizers)' | kubectl replace --raw "/api/v1/namespaces/longhorn-system/finalize" -f - || true
+      when: "'controller' in group_names"
+
+    - name: 🔎 Verificar si Longhorn fue eliminado completamente
+      ansible.builtin.raw: |
+        export PATH=$PATH:/usr/local/bin
+        export KUBECONFIG={{ kubeconfig_path }}
+        kubectl get all -n longhorn-system || echo "🟢 Namespace longhorn-system no existe"
+      register: longhorn_cleanup_status
+      when: "'controller' in group_names"
+
+    - name: 📋 Mostrar resultado de limpieza en controller
+      ansible.builtin.debug:
+        msg: "{{ longhorn_cleanup_status.stdout_lines }}"
       when: "'controller' in group_names"
 
     # ------------------------------
