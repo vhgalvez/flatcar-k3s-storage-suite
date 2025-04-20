@@ -15,25 +15,22 @@
     kubeconfig_token_path: "/home/victory/.kube/token.jwt"
     vip_kubernetes: "10.17.5.10"
 
-  pre_tasks:
+    pre_tasks:
+      - name: 📄 Leer token JWT desde master1 usando raw + slurp
+        raw: cat /tmp/traefik-token.jwt
+        register: token_raw
+        delegate_to: "{{ groups['masters'][0] }}"
+        changed_when: false
 
-    - name: 📄 Copiar token JWT desde master1 al controller
-      fetch:
-        src: /tmp/traefik-token.jwt
-        dest: /tmp/token_from_master/
-        flat: yes
-      delegate_to: "{{ groups['masters'][0] }}"
-
-    - name: 📥 Mover token a ruta final del usuario
-      copy:
-        src: "/tmp/token_from_master/traefik-token.jwt"
-        dest: "{{ kubeconfig_token_path }}"
-        owner: victory
-        group: victory
-        mode: '0600'
+      - name: 📥 Guardar token en el controlador
+        copy:
+          content: "{{ token_raw.stdout }}"
+          dest: "{{ kubeconfig_token_path }}"
+          owner: victory
+          group: victory
+          mode: "0600"
 
   tasks:
-
     - name: 📦 Instalar paquetes base
       package:
         name: [python3-pip, git, curl]
@@ -47,14 +44,14 @@
       get_url:
         url: "https://dl.k8s.io/release/{{ kubectl_version }}/bin/linux/amd64/kubectl"
         dest: /tmp/kubectl
-        mode: '0755'
+        mode: "0755"
 
     - name: ✅ Mover kubectl a {{ kubectl_path }}
       copy:
         src: /tmp/kubectl
         dest: "{{ kubectl_path }}"
         remote_src: yes
-        mode: '0755'
+        mode: "0755"
 
     - name: 🔍 Verificar instalación de kubectl
       command: "{{ kubectl_path }} version --client"
@@ -86,7 +83,7 @@
         src: "{{ helm_install_tmp }}/linux-amd64/helm"
         dest: "{{ helm_path }}"
         remote_src: yes
-        mode: '0755'
+        mode: "0755"
 
     - name: 🧪 Verificar versión de Helm
       command: "{{ helm_path }} version"
@@ -107,7 +104,7 @@
         state: directory
         owner: victory
         group: victory
-        mode: '0700'
+        mode: "0700"
 
     - name: 🔁 Reemplazar 127.0.0.1 por VIP en kubeconfig (si existe)
       replace:
@@ -141,7 +138,7 @@
       blockinfile:
         path: "{{ kubeconfig_path }}"
         marker: "# {mark} ANSIBLE MANAGED TOKEN"
-        insertafter: '^users:$'
+        insertafter: "^users:$"
         block: |
           - name: default
             user:
@@ -153,7 +150,7 @@
         path: "{{ item }}"
         owner: victory
         group: victory
-        mode: '0600'
+        mode: "0600"
       loop:
         - "{{ kubeconfig_path }}"
         - "{{ kubeconfig_token_path }}"
