@@ -1,4 +1,5 @@
 ---
+# playbooks\08_cleanup_longhorn.yml
 - name: ♻️ Limpieza completa de Longhorn en nodos controller, storage y workers
   hosts: controller,storage,workers
   become: true

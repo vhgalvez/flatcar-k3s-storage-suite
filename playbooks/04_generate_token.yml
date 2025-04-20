@@ -1,0 +1,53 @@
+---
+# playbooks\04_generate_token.yml
+- name: 🔐 0️⃣ Generar token JWT en master con permisos adecuados
+  hosts: masters[0]
+  become: true
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: /bin/false  # Flatcar compatible
+    kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
+    token_output_path: "/tmp/traefik-token.jwt"
+    token_duration: "87600h"
+    sa_name: "remote-access"
+    rb_name: "remote-access-admin"
+
+  tasks:
+    - name: 🧹 Eliminar ServiceAccount '{{ sa_name }}' si existe
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        k3s kubectl delete serviceaccount {{ sa_name }} --ignore-not-found=true
+      register: sa_delete
+      changed_when: false
+
+    - name: 🧹 Eliminar ClusterRoleBinding '{{ rb_name }}' si existe
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        k3s kubectl delete clusterrolebinding {{ rb_name }} --ignore-not-found=true
+      changed_when: false
+
+    - name: 🧾 Crear ServiceAccount '{{ sa_name }}'
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        k3s kubectl create serviceaccount {{ sa_name }}
+
+    - name: 🔑 Crear ClusterRoleBinding '{{ rb_name }}'
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        k3s kubectl create clusterrolebinding {{ rb_name }} \
+          --clusterrole=cluster-admin \
+          --serviceaccount=default:{{ sa_name }}
+
+    - name: 🔐 Generar token JWT para '{{ sa_name }}'
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        k3s kubectl create token {{ sa_name }} --duration={{ token_duration }}
+      register: token_output
+
+    - name: 📄 Guardar token en archivo
+      raw: |
+        echo "{{ token_output.stdout }}" > {{ token_output_path }}
+
+    - name: 🟢 Token generado correctamente
+      debug:
+        var: token_output.stdout

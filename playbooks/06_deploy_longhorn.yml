@@ -1,6 +1,6 @@
-# playbooks/03_deploy_longhorn.yml
+# playbooks/06_deploy_longhorn.yml
 ---
-- name: 3️⃣ Instalar y validar Longhorn con Helm
+- name: 6️⃣ Instalar y validar Longhorn con Helm
   hosts: controller
   become: true
   gather_facts: false
@@ -22,15 +22,16 @@
       register: longhorn_check
       changed_when: false
 
-
     - name: ⚠️ Abortamos si hay residuos de Longhorn
       fail:
         msg: |
           ⚠️ El namespace '{{ longhorn_namespace }}' contiene recursos de una instalación anterior.
-          🧹 Ejecuta: ansible-playbook playbooks/01_prepare_nodes.yml -e "confirm_cleanup=yes"
+          🧹 Ejecuta: ansible-playbook playbooks/08_cleanup_longhorn.yml -e "confirm_cleanup=yes"
           Recursos encontrados:
           {{ longhorn_check.stdout }}
-      when: "'No resources found' not in longhorn_check.stdout"
+      when:
+        - "'No resources found' not in longhorn_check.stdout"
+        - "'Unable to connect' not in longhorn_check.stdout"
 
   tasks:
 
@@ -49,15 +50,15 @@
       register: longhorn_install
       failed_when: longhorn_install.rc != 0
 
-    - name: ⏳ Esperar a que los pods de Longhorn estén listos (máx 5 minutos)
+    - name: ⏳ Esperar readiness de pods
       raw: |
-        kubectl wait --for=condition=Ready pod -n {{ longhorn_namespace }} --all --timeout=300s
+        /usr/local/bin/kubectl --kubeconfig {{ kubeconfig_path }} wait --for=condition=Ready pod -n {{ longhorn_namespace }} --all --timeout=300s
       register: pod_ready
       failed_when: pod_ready.rc != 0
 
-    - name: 📊 Mostrar estado de los pods de Longhorn
+    - name: 📊 Mostrar estado de pods
       raw: |
-        kubectl get pods -n {{ longhorn_namespace }}
+        /usr/local/bin/kubectl --kubeconfig {{ kubeconfig_path }} get pods -n {{ longhorn_namespace }}
       register: pods
 
     - name: ✅ Pods desplegados
@@ -66,8 +67,8 @@
 
     - name: 📁 Validar PVCs y PVs
       raw: |
-        kubectl get pvc -A
-        kubectl get pv
+        /usr/local/bin/kubectl --kubeconfig {{ kubeconfig_path }} get pvc -A
+        /usr/local/bin/kubectl --kubeconfig {{ kubeconfig_path }} get pv
       register: volumes_info
 
     - name: 📦 Volúmenes encontrados
