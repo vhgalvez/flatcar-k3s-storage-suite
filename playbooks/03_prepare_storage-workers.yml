@@ -6,6 +6,23 @@
   become: true
 
   tasks:
+    # === VALIDACIÓN INICIAL SEGURA ===
+
+    - name: 🔒 Bloquear si /dev/vdb está montado (para evitar sobrescritura)
+      raw: |
+        mount | grep -q '^/dev/vdb' && echo "❌ /dev/vdb está montado. Abortando." && exit 1 || exit 0
+      register: vdb_mount_check
+      failed_when: vdb_mount_check.rc != 0
+      changed_when: false
+      tags: safety
+
+    - name: ❌ Bloquear si /dev/vdb tiene particiones o LVM activas
+      raw: |
+        lsblk -no TYPE /dev/vdb | grep -qE 'part|lvm' && echo "❌ /dev/vdb tiene particiones o LVM activas. Abortando." && exit 1 || exit 0
+      register: vdb_lvm_check
+      failed_when: vdb_lvm_check.rc != 0
+      changed_when: false
+      tags: safety
 
     - name: 📀 Verificar existencia del disco /dev/vdb
       raw: test -b /dev/vdb
@@ -14,6 +31,7 @@
       changed_when: false
 
     # === STORAGE ONLY ===
+
     - name: 🧹 Crear tabla de particiones GPT (solo storage)
       raw: parted -s /dev/vdb mklabel gpt
       when: "'storage' in group_names"
@@ -84,6 +102,7 @@
       when: "'storage' in group_names"
 
     # === WORKERS ONLY ===
+
     - name: 💽 Formatear /dev/vdb como ext4 (solo workers)
       raw: mkfs.ext4 -F /dev/vdb
       when: "'workers' in group_names"
@@ -97,6 +116,7 @@
       when: "'workers' in group_names"
 
     # === VALIDACIÓN GENERAL ===
+
     - name: ✅ Validar montaje final
       raw: df -h | grep -E "/srv/nfs/postgresql|/srv/nfs/shared|/mnt/longhorn-disk"
       register: mount_check
