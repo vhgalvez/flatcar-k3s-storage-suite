@@ -1,5 +1,4 @@
----
-- name: 🔐 0️⃣ Generar token JWT en master y copiarlo al controller
+- name: 🔐 0️⃣ Generar token JWT en master con permisos adecuados
   hosts: masters[0]
   gather_facts: false
   become: true
@@ -8,62 +7,49 @@
     kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
     local_token_path: "/tmp/traefik-token.jwt"
     token_duration: "87600h"  # 10 años
+    serviceaccount_name: "remote-access"
+    rolebinding_name: "remote-access-admin"
 
   tasks:
-    - name: 🔐 Generar token JWT para usuario 'default' con k3s
-      raw: |
+
+    - name: 🧹 Eliminar ServiceAccount anterior si existe
+      shell: |
+        k3s kubectl delete serviceaccount {{ serviceaccount_name }} --ignore-not-found=true
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+
+    - name: 🧹 Eliminar ClusterRoleBinding anterior si existe
+      shell: |
+        k3s kubectl delete clusterrolebinding {{ rolebinding_name }} --ignore-not-found=true
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+
+    - name: 🧾 Crear ServiceAccount '{{ serviceaccount_name }}'
+      shell: |
+        k3s kubectl create serviceaccount {{ serviceaccount_name }}
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+
+    - name: 🔑 Crear ClusterRoleBinding '{{ rolebinding_name }}' con permisos de admin
+      shell: |
+        k3s kubectl create clusterrolebinding {{ rolebinding_name }} \
+        --clusterrole=cluster-admin \
+        --serviceaccount=default:{{ serviceaccount_name }}
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+
+    - name: 🔐 Generar token JWT para ServiceAccount '{{ serviceaccount_name }}'
+      shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        k3s kubectl create token default --duration={{ token_duration }}
+        k3s kubectl create token {{ serviceaccount_name }} --duration={{ token_duration }}
       register: token_output
       changed_when: false
 
     - name: 📄 Guardar token localmente en el master
-      raw: |
+      shell: |
         echo "{{ token_output.stdout }}" > {{ local_token_path }}
 
-    - name: 🟢 Token generado en master
+    - name: 🟢 Token generado correctamente
       debug:
         var: token_output.stdout
-
-
-- name: 📥 Copiar token JWT desde master al controller
-  hosts: controller
-  gather_facts: false
-  become: true
-
-  vars:
-    ssh_key_path: "/root/.ssh/cluster_k3s/shared/id_rsa_shared_cluster"
-    ssh_user: "core"
-    master_ip: "{{ groups['masters'][0] }}"
-    local_token_path: "/tmp/traefik-token.jwt"
-    token_dest: "/home/monitoring/.kube/token.jwt"
-
-  tasks:
-    - name: 📁 Crear carpeta destino
-      file:
-        path: "{{ token_dest | dirname }}"
-        state: directory
-        owner: monitoring
-        group: monitoring
-        mode: '0755'
-
-    - name: 📥 Copiar token con scp desde el master
-      raw: |
-        scp -i {{ ssh_key_path }} -o StrictHostKeyChecking=no {{ ssh_user }}@{{ master_ip }}:{{ local_token_path }} {{ token_dest }}
-      become: false
-
-    - name: 🔐 Ajustar permisos del token
-      file:
-        path: "{{ token_dest }}"
-        owner: monitoring
-        group: monitoring
-        mode: '0600'
-
-    - name: 🔒 Verificar token copiado
-      command: cat {{ token_dest }}
-      register: token_check
-      changed_when: false
-
-    - name: 📦 Token copiado al controller
-      debug:
-        var: token_check.stdout
+      no_log: true
