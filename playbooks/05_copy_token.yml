@@ -1,5 +1,4 @@
 # playbooks/05_copy_token.yml
----
 - name: 📥 Copiar token JWT desde master al controller
   hosts: controller
   become: true
@@ -7,10 +6,20 @@
 
   vars:
     ansible_python_interpreter: /usr/bin/python3
+    master_host: "{{ hostvars[groups['masters'][0]]['ansible_host'] }}"
     remote_token_path: "/tmp/traefik-token.jwt"
     local_token_path: "/home/monitoring/.kube/token.jwt"
+    ssh_user: "root"
+    ssh_password: "Gdh88K28"  # Contraseña del nodo controller si hicieras ssh inverso
 
   tasks:
+
+    - name: 📦 Instalar sshpass para usar scp con contraseña
+      become: true
+      package:
+        name: sshpass
+        state: present
+
     - name: 📁 Crear carpeta destino
       file:
         path: "{{ local_token_path | dirname }}"
@@ -19,11 +28,15 @@
         group: monitoring
         mode: '0755'
 
-    - name: 📥 Copiar token localmente (controller == master)
-      copy:
-        src: "{{ remote_token_path }}"
-        dest: "{{ local_token_path }}"
-        remote_src: yes
+    - name: 📥 Copiar token con sshpass y scp desde el master
+      become: true
+      raw: |
+        sshpass -p '{{ ssh_password }}' scp -o StrictHostKeyChecking=no \
+          {{ ssh_user }}@{{ master_host }}:{{ remote_token_path }} {{ local_token_path }}
+
+    - name: 🔐 Ajustar permisos del token
+      file:
+        path: "{{ local_token_path }}"
         owner: monitoring
         group: monitoring
         mode: '0600'
