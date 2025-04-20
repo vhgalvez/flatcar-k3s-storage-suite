@@ -10,7 +10,8 @@
     kubectl_path: "/usr/local/bin/kubectl"
     helm_bin: "/usr/local/bin/helm"
     helm_install_path: "/tmp/helm_install"
-    kubeconfig_path: "/home/monitoring/.kube/config"
+    kubeconfig_path: "/home/victory/.kube/config"
+    token_path: "/home/victory/.kube/token.jwt"
     vip_kubernetes: "10.17.5.10"
 
   tasks:
@@ -91,14 +92,14 @@
         path: "{{ helm_install_path }}"
         state: absent
 
-    # 🛠️ Configurar kubeconfig con VIP y token JWT
+    # 🔐 Configurar KUBECONFIG con autenticación por token
 
-    - name: 📄 Verificar si el archivo kubeconfig ya existe
+    - name: 📄 Verificar si existe el kubeconfig
       stat:
         path: "{{ kubeconfig_path }}"
       register: kubeconfig_stat
 
-    - name: 📁 Crear carpeta para kubeconfig si no existe
+    - name: 📁 Crear carpeta .kube si no existe
       file:
         path: "{{ kubeconfig_path | dirname }}"
         state: directory
@@ -126,7 +127,7 @@
         mode: '0600'
       when: not kubeconfig_stat.stat.exists
 
-    - name: 🧹 Eliminar client-certificate, client-key o token antiguos
+    - name: 🧹 Eliminar líneas antiguas de certificados y tokens
       lineinfile:
         path: "{{ kubeconfig_path }}"
         regexp: '^\s*(client-certificate|client-key|token):'
@@ -144,7 +145,7 @@
         marker: "# {mark} ANSIBLE MANAGED CLUSTER CONFIG"
         insertafter: '^apiVersion:'
 
-    - name: 🔐 Insertar token JWT
+    - name: 🔐 Insertar o reemplazar token JWT
       blockinfile:
         path: "{{ kubeconfig_path }}"
         marker: "# {mark} ANSIBLE MANAGED TOKEN"
@@ -152,4 +153,4 @@
         block: |
           - name: default
             user:
-              token: "{{ lookup('file', '/home/monitoring/.kube/token.jwt') }}"
+              token: "{{ lookup('file', token_path) }}"
