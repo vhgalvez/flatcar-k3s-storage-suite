@@ -1,9 +1,8 @@
 ---
 - name: 🔐 0️⃣ Generar token JWT en master y copiarlo al controller
   hosts: masters[0]
-  become: true
   gather_facts: false
-
+  become: true
   vars:
     kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
     token_path_shared: "/srv/nfs/shared/traefik-token.jwt"
@@ -11,17 +10,15 @@
 
   tasks:
     - name: 🔐 Generar token JWT para usuario 'default'
-      shell: |
+      raw: |
         export KUBECONFIG={{ kubeconfig_path }}
         /usr/local/bin/kubectl create token default --duration={{ token_duration }}
       register: token_output
       changed_when: false
 
     - name: 📄 Guardar token en NFS compartido
-      copy:
-        content: "{{ token_output.stdout }}"
-        dest: "{{ token_path_shared }}"
-        mode: '0644'
+      raw: |
+        echo "{{ token_output.stdout }}" > {{ token_path_shared }}
 
     - name: 🟢 Token generado con éxito
       debug:
@@ -29,9 +26,8 @@
 
 - name: 📥 Copiar token JWT desde NFS al controller
   hosts: controller
-  become: true
-  become_user: monitoring
   gather_facts: false
+  become: true
 
   vars:
     token_path_shared: "/srv/nfs/shared/traefik-token.jwt"
@@ -39,22 +35,22 @@
 
   tasks:
     - name: 📁 Crear carpeta destino
-      file:
-        path: "{{ token_dest | dirname }}"
-        state: directory
-        mode: '0755'
+      raw: |
+        mkdir -p {{ token_dest | dirname }}
+        chown monitoring:monitoring {{ token_dest | dirname }}
+        chmod 755 {{ token_dest | dirname }}
 
-    - name: 📥 Copiar token JWT desde NFS
-      copy:
-        src: "{{ token_path_shared }}"
-        dest: "{{ token_dest }}"
-        mode: '0600'
+    - name: 📥 Copiar token desde NFS
+      raw: |
+        cp {{ token_path_shared }} {{ token_dest }}
+        chown monitoring:monitoring {{ token_dest }}
+        chmod 600 {{ token_dest }}
 
-    - name: 🔒 Verificar token copiado
-      command: cat {{ token_dest }}
+    - name: 🔒 Mostrar token copiado
+      raw: cat {{ token_dest }}
       register: token_check
       changed_when: false
 
-    - name: 📦 Token en controller
+    - name: 📦 Token copiado al controller
       debug:
         var: token_check.stdout
