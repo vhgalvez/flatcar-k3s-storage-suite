@@ -1,5 +1,6 @@
 ---
 # playbooks/03_prepare_storage-workers.yml
+---
 - name: 3 - Preparar almacenamiento en nodos storage y workers
   hosts: storage,workers
   gather_facts: false
@@ -18,6 +19,7 @@
         lvremove -f vg_storage/longhorn_lv 2>/dev/null || true
         vgremove -f vg_storage 2>/dev/null || true
         pvremove -f /dev/vdb1 2>/dev/null || true
+        parted -s /dev/vdb rm 1 2>/dev/null || true
         wipefs -a /dev/vdb 2>/dev/null || true
       when: "'storage' in group_names"
 
@@ -28,6 +30,10 @@
         wipefs -a /dev/vdb 2>/dev/null || true
       when: "'workers' in group_names"
 
+    - name: ⏳ Esperar a que el sistema procese cambios de disco
+      raw: udevadm settle
+
+    # === VALIDACIÓN DE DISCO ===
     - name: 📀 Verificar existencia del disco /dev/vdb
       raw: test -b /dev/vdb
       register: disk_check
