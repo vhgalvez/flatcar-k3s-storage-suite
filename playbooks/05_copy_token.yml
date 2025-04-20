@@ -3,12 +3,12 @@
   hosts: controller
   become: true
   gather_facts: false
-
   vars:
-    ansible_python_interpreter: /usr/bin/python3  # El controller sí tiene Python
+    ansible_python_interpreter: /usr/bin/python3
     master_host: "{{ groups['masters'][0] }}"
     remote_token_path: "/tmp/traefik-token.jwt"
     local_token_path: "/home/monitoring/.kube/token.jwt"
+    ansible_become_password: "Gdh88K28"
 
   tasks:
     - name: 📁 Crear carpeta destino
@@ -30,11 +30,14 @@
         group: monitoring
         mode: '0600'
 
-    - name: 🔒 Verificar token copiado
+    - name: 🔒 Validar que el token fue copiado correctamente con sudo
+      become: true
+      become_user: root
       command: cat {{ local_token_path }}
       register: token_check
       changed_when: false
+      failed_when: token_check.stdout is not defined or token_check.stdout | length < 100
 
-    - name: 📦 Token copiado al controller
+    - name: ✅ Token copiado correctamente (primeros caracteres)
       debug:
-        var: token_check.stdout
+        msg: "🔑 Token JWT: {{ token_check.stdout[:40] }}..."
