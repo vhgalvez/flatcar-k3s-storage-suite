@@ -3,6 +3,7 @@
   hosts: controller
   become: true
   gather_facts: false
+
   vars:
     ansible_python_interpreter: /usr/bin/python3
     master_host: "{{ groups['masters'][0] }}"
@@ -30,9 +31,7 @@
         group: monitoring
         mode: '0600'
 
-    - name: 🔒 Validar que el token fue copiado correctamente con sudo
-      become: true
-      become_user: root
+    - name: 🔒 Validar que el token fue copiado correctamente
       command: cat {{ local_token_path }}
       register: token_check
       changed_when: false
