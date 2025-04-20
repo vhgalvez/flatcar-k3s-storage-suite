@@ -1,91 +1,74 @@
+# playbooks/03_deploy_longhorn.yml
 ---
-# playbooks\04_validate_cluster.yml
-# ✅ Validación completa del entorno desplegado
-
-- name: ✅ Validar almacenamiento en nodo de storage
-  hosts: storage
+- name: 3️⃣ Instalar y validar Longhorn con Helm
+  hosts: controller
   become: true
   gather_facts: false
-  tasks:
-    - name: 📂 Validar montajes NFS
-      raw: mount | grep -E "/srv/nfs/postgresql|/srv/nfs/shared"
-      register: storage_mounts
-      failed_when: storage_mounts.rc != 0
 
-    - name: 📦 Verificar volumen LVM longhorn_lv
-      raw: lvdisplay /dev/vg_storage/longhorn_lv
-      register: longhorn_lv_check
-      failed_when: longhorn_lv_check.rc != 0
-
-    - name: 🟢 Mostrar resultados de montajes
-      debug:
-        var: storage_mounts.stdout_lines
-
-- name: ✅ Validar configuración de discos Longhorn en workers
-  hosts: workers
-  become: true
-  gather_facts: false
-  tasks:
-    - name: 📁 Verificar /mnt/longhorn-disk montado
-      raw: mountpoint -q /mnt/longhorn-disk
-      register: mount_check
-      failed_when: mount_check.rc != 0
-
-    - name: 🔍 Verificar sistema de archivos en /dev/vdb
-      raw: blkid /dev/vdb || true
-      register: fs_check
-      failed_when: fs_check.rc != 0
-
-    - name: ⚙️ Verificar presencia de iscsiadm
-      raw: which iscsiadm || true
-      register: iscsi_check
-      failed_when: iscsi_check.rc != 0
-
-    - name: 📊 Mostrar estado del montaje
-      debug:
-        var: mount_check
-
-- name: ✅ Validar despliegue de Longhorn desde master1
-  hosts: master1
-  become: true
-  gather_facts: false
   vars:
-    kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
+    kubeconfig_path: "/home/victory/.kube/config"
+    helm_bin: "/usr/local/bin/helm"
     longhorn_namespace: "longhorn-system"
+
+  environment:
+    PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+  pre_tasks:
+
+    - name: 🔍 Verificar si existen recursos en el namespace de Longhorn
+      raw: |
+        kubectl get all -n {{ longhorn_namespace }} || true
+      register: longhorn_check
+      changed_when: false
+
+    - name: ⚠️ Abortamos si hay residuos de Longhorn
+      fail:
+        msg: |
+          ⚠️ El namespace '{{ longhorn_namespace }}' contiene recursos de una instalación anterior.
+          🧹 Ejecuta: ansible-playbook playbooks/01_prepare_nodes.yml -e "confirm_cleanup=yes"
+          Recursos encontrados:
+          {{ longhorn_check.stdout }}
+      when: "'No resources found' not in longhorn_check.stdout"
+
   tasks:
-    - name: 🔍 Verificar namespace longhorn-system
-      raw: k3s kubectl --kubeconfig {{ kubeconfig_path }} get ns {{ longhorn_namespace }}
-      register: ns_check
-      failed_when: ns_check.rc != 0
 
-    - name: 🏷️ Verificar etiquetas de nodos
-      raw: k3s kubectl --kubeconfig {{ kubeconfig_path }} get nodes --show-labels | grep longhorn-node
-      register: label_check
-      failed_when: label_check.rc != 0
+    - name: 📥 Añadir y actualizar repositorio Helm de Longhorn
+      raw: |
+        {{ helm_bin }} repo add longhorn https://charts.longhorn.io || true
+        {{ helm_bin }} repo update
 
-    - name: 📦 Verificar pods de Longhorn
-      raw: k3s kubectl --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} get pods
-      register: pod_list
+    - name: 🚀 Instalar Longhorn con Helm
+      raw: |
+        {{ helm_bin }} upgrade --install longhorn longhorn/longhorn \
+          --namespace {{ longhorn_namespace }} \
+          --create-namespace \
+          --wait \
+          --timeout 10m0s
+      register: longhorn_install
+      failed_when: longhorn_install.rc != 0
 
-    - name: ❌ Verificar errores en pods
-      raw: k3s kubectl --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} get pods | grep -E "CrashLoopBackOff|Error|Pending" || true
-      register: pod_errors
+    - name: ⏳ Esperar a que los pods de Longhorn estén listos (máx 5 minutos)
+      raw: |
+        kubectl wait --for=condition=Ready pod -n {{ longhorn_namespace }} --all --timeout=300s
+      register: pod_ready
+      failed_when: pod_ready.rc != 0
 
-    - name: 📄 Mostrar lista de pods
+    - name: 📊 Mostrar estado de los pods de Longhorn
+      raw: |
+        kubectl get pods -n {{ longhorn_namespace }}
+      register: pods
+
+    - name: ✅ Pods desplegados
       debug:
-        var: pod_list.stdout_lines
-
-    - name: ⚠️ Mostrar errores de pods (si existen)
-      debug:
-        var: pod_errors.stdout_lines
-      when: pod_errors.stdout != ""
+        var: pods.stdout_lines
 
     - name: 📁 Validar PVCs y PVs
       raw: |
-        k3s kubectl --kubeconfig {{ kubeconfig_path }} get pvc --all-namespaces
-        k3s kubectl --kubeconfig {{ kubeconfig_path }} get pv
-      register: pvc_pv_check
+        kubectl get pvc -A
+        kubectl get pv
+      register: volumes_info
 
-    - name: 📄 Mostrar PVCs y PVs
+    - name: 📦 Volúmenes encontrados
       debug:
-        var: pvc_pv_check.stdout_lines
+        var: volumes_info.stdout_lines
