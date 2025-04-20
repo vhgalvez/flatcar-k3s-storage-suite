@@ -6,7 +6,7 @@
 
   vars:
     kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
-    token_path_shared: "/srv/nfs/shared/traefik-token.jwt"
+    local_token_path: "/tmp/traefik-token.jwt"
     token_duration: "87600h"  # 10 años
 
   tasks:
@@ -17,38 +17,49 @@
       register: token_output
       changed_when: false
 
-    - name: 📄 Guardar token en NFS compartido
+    - name: 📄 Guardar token localmente en el master
       raw: |
-        echo "{{ token_output.stdout }}" > {{ token_path_shared }}
+        echo "{{ token_output.stdout }}" > {{ local_token_path }}
 
-    - name: 🟢 Token generado con éxito
+    - name: 🟢 Token generado en master
       debug:
         var: token_output.stdout
 
-- name: 📥 Copiar token JWT desde NFS al controller
+- name: 📥 Copiar token JWT desde master al controller
   hosts: controller
-  become: true
   gather_facts: false
+  become: true
 
   vars:
-    token_path_shared: "/srv/nfs/shared/traefik-token.jwt"
+    local_token_path: "/tmp/traefik-token.jwt"
     token_dest: "/home/monitoring/.kube/token.jwt"
 
   tasks:
     - name: 📁 Crear carpeta destino
-      raw: |
-        mkdir -p {{ token_dest | dirname }}
-        chown monitoring:monitoring {{ token_dest | dirname }}
-        chmod 755 {{ token_dest | dirname }}
+      file:
+        path: "{{ token_dest | dirname }}"
+        state: directory
+        owner: monitoring
+        group: monitoring
+        mode: '0755'
 
-    - name: 📥 Copiar token desde NFS
-      raw: |
-        cp {{ token_path_shared }} {{ token_dest }}
-        chown monitoring:monitoring {{ token_dest }}
-        chmod 600 {{ token_dest }}
+    - name: 📥 Copiar token desde master vía delegate_to
+      ansible.builtin.fetch:
+        src: "{{ local_token_path }}"
+        dest: "/tmp/token.jwt"
+        flat: yes
+      delegate_to: "{{ groups['masters'][0] }}"
 
-    - name: 🔒 Mostrar token copiado
-      raw: cat {{ token_dest }}
+    - name: 🚚 Mover token a destino final
+      copy:
+        src: "/tmp/token.jwt"
+        dest: "{{ token_dest }}"
+        owner: monitoring
+        group: monitoring
+        mode: '0600'
+
+    - name: 🔒 Verificar token copiado
+      command: cat {{ token_dest }}
       register: token_check
       changed_when: false
 
