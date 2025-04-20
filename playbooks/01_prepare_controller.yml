@@ -11,8 +11,9 @@
     helm_bin: "/usr/local/bin/helm"
     helm_install_path: "/tmp/helm_install"
     kubeconfig_path: "/home/victory/.kube/config"
-    token_path: "/home/victory/.kube/token.jwt"
+    kube_token_path: "/home/victory/.kube/token.jwt"
     vip_kubernetes: "10.17.5.10"
+    kube_user: "victory"
 
   tasks:
 
@@ -66,47 +67,29 @@
         dest: "{{ helm_install_path }}"
         remote_src: yes
 
-    - name: 🗂 Verificar existencia del binario Helm
-      stat:
-        path: "{{ helm_install_path }}/linux-amd64/helm"
-      register: helm_bin_check
-
     - name: ✅ Mover Helm a {{ helm_bin }}
       copy:
         src: "{{ helm_install_path }}/linux-amd64/helm"
         dest: "{{ helm_bin }}"
         mode: '0755'
         remote_src: yes
-      when: helm_bin_check.stat.exists
-
-    - name: 🧪 Verificar versión de Helm
-      command: "{{ helm_bin }} version"
-      register: helm_output
-
-    - name: 📊 Mostrar salida de Helm
-      debug:
-        msg: "{{ helm_output.stdout | default('Helm no disponible') }}"
 
     - name: 🧹 Limpiar archivos temporales de Helm
       file:
         path: "{{ helm_install_path }}"
         state: absent
 
-    # 🔐 Configurar KUBECONFIG con autenticación por token
+    # Configurar kubeconfig con VIP y token JWT
 
-    - name: 📄 Verificar si existe el kubeconfig
-      stat:
-        path: "{{ kubeconfig_path }}"
-      register: kubeconfig_stat
-
-    - name: 📁 Crear carpeta .kube si no existe
+    - name: 📁 Asegurar directorio ~/.kube existe y tiene permisos
       file:
-        path: "{{ kubeconfig_path | dirname }}"
+        path: "/home/{{ kube_user }}/.kube"
         state: directory
         mode: '0700'
-      when: not kubeconfig_stat.stat.exists
+        owner: "{{ kube_user }}"
+        group: "{{ kube_user }}"
 
-    - name: 📄 Crear archivo kubeconfig si no existe
+    - name: 📄 Crear kubeconfig si no existe
       copy:
         dest: "{{ kubeconfig_path }}"
         content: |
@@ -125,27 +108,29 @@
           current-context: default
           users: []
         mode: '0600'
-      when: not kubeconfig_stat.stat.exists
+        owner: "{{ kube_user }}"
+        group: "{{ kube_user }}"
+      when: not kubeconfig_path is file
 
-    - name: 🧹 Eliminar líneas antiguas de certificados y tokens
+    - name: 🧹 Eliminar certificados antiguos (client-certificate, client-key, token)
       lineinfile:
         path: "{{ kubeconfig_path }}"
         regexp: '^\s*(client-certificate|client-key|token):'
         state: absent
 
-    - name: 🛠 Asegurar configuración del cluster con VIP
+    - name: 🔁 Asegurar IP VIP y tls-skip en cluster config
       blockinfile:
         path: "{{ kubeconfig_path }}"
+        marker: "# {mark} ANSIBLE MANAGED CLUSTER CONFIG"
         block: |
           clusters:
           - cluster:
               server: https://{{ vip_kubernetes }}:6443
               insecure-skip-tls-verify: true
             name: default
-        marker: "# {mark} ANSIBLE MANAGED CLUSTER CONFIG"
         insertafter: '^apiVersion:'
 
-    - name: 🔐 Insertar o reemplazar token JWT
+    - name: 🔐 Insertar token JWT en kubeconfig
       blockinfile:
         path: "{{ kubeconfig_path }}"
         marker: "# {mark} ANSIBLE MANAGED TOKEN"
@@ -153,4 +138,14 @@
         block: |
           - name: default
             user:
-              token: "{{ lookup('file', token_path) }}"
+              token: "{{ lookup('file', kube_token_path) }}"
+        mode: '0600'
+        owner: "{{ kube_user }}"
+        group: "{{ kube_user }}"
+
+    - name: 🔒 Asegurar permisos del kubeconfig
+      file:
+        path: "{{ kubeconfig_path }}"
+        owner: "{{ kube_user }}"
+        group: "{{ kube_user }}"
+        mode: '0600'
