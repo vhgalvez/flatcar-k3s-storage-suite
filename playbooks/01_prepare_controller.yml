@@ -11,21 +11,10 @@
     helm_bin: "/usr/local/bin/helm"
     helm_install_path: "/tmp/helm_install"
     kubeconfig_path: "/home/victory/.kube/config"
-    token_path: "/home/victory/.kube/token.jwt"
+    kube_token_path: "/home/victory/.kube/token.jwt"
     vip_kubernetes: "10.17.5.10"
 
   tasks:
-
-    - name: 📁 Asegurar directorios necesarios
-      file:
-        path: "{{ item }}"
-        state: directory
-        owner: victory
-        group: victory
-        mode: '0755'
-      loop:
-        - "/home/victory/.kube"
-        - "{{ helm_install_path }}"
 
     - name: 📦 Instalar paquetes base (pip, git, curl)
       package:
@@ -61,6 +50,11 @@
       debug:
         msg: "{{ kubectl_output.stdout | default('kubectl no disponible') }}"
 
+    - name: 📁 Crear directorio temporal para Helm
+      file:
+        path: "{{ helm_install_path }}"
+        state: directory
+
     - name: 📥 Descargar Helm {{ helm_version }}
       get_url:
         url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
@@ -72,18 +66,12 @@
         dest: "{{ helm_install_path }}"
         remote_src: yes
 
-    - name: 🗂 Verificar existencia del binario Helm
-      stat:
-        path: "{{ helm_install_path }}/linux-amd64/helm"
-      register: helm_bin_check
-
     - name: ✅ Mover Helm a {{ helm_bin }}
       copy:
         src: "{{ helm_install_path }}/linux-amd64/helm"
         dest: "{{ helm_bin }}"
         mode: '0755'
         remote_src: yes
-      when: helm_bin_check.stat.exists
 
     - name: 🧪 Verificar versión de Helm
       command: "{{ helm_bin }} version"
@@ -98,43 +86,36 @@
         path: "{{ helm_install_path }}"
         state: absent
 
-    # 🛠️ Configuración de kubeconfig para usar token y VIP
-    - name: 🛑 Limpiar certificado del usuario si existe
-      lineinfile:
+    # 🔧 Configuración segura de kubeconfig con token
+    - name: 🔁 Reemplazar IP localhost por VIP en kubeconfig
+      replace:
         path: "{{ kubeconfig_path }}"
-        regexp: '^\s*(client-certificate-data|client-key-data):'
-        state: absent
+        regexp: '127\.0\.0\.1'
+        replace: "{{ vip_kubernetes }}"
       ignore_errors: yes
 
-    - name: 🛑 Eliminar certificate-authority-data
+    - name: ❌ Eliminar línea certificate-authority-data
       lineinfile:
         path: "{{ kubeconfig_path }}"
         regexp: '^\s*certificate-authority-data:'
         state: absent
       ignore_errors: yes
 
-    - name: 🔁 Reemplazar IP localhost por VIP
+    - name: ⚠️ Añadir 'insecure-skip-tls-verify'
       replace:
         path: "{{ kubeconfig_path }}"
-        regexp: '127\.0\.0\.1'
-        replace: "{{ vip_kubernetes }}"
+        regexp: '(^\s*server: https://{{ vip_kubernetes }}:6443)'
+        replace: '\1\n    insecure-skip-tls-verify: true'
+      ignore_errors: yes
 
-    - name: ⚠️ Añadir 'insecure-skip-tls-verify' si no está
-      blockinfile:
-        path: "{{ kubeconfig_path }}"
-        insertafter: '    server: https://{{ vip_kubernetes }}:6443'
-        block: |
-          insecure-skip-tls-verify: true
-      when: "'insecure-skip-tls-verify' not in lookup('file', kubeconfig_path)"
-
-    - name: 🔐 Eliminar token viejo si existe
+    - name: 🧹 Eliminar client-certificate y client-key
       lineinfile:
         path: "{{ kubeconfig_path }}"
-        regexp: '^\s*token:'
+        regexp: '^\s*(client-certificate|client-key|client-certificate-data|client-key-data):'
         state: absent
       ignore_errors: yes
 
-    - name: 🔐 Insertar nuevo token JWT en users
+    - name: 🔄 Reemplazar bloque de usuario con token JWT
       blockinfile:
         path: "{{ kubeconfig_path }}"
         marker: "# {mark} ANSIBLE MANAGED TOKEN"
@@ -142,14 +123,19 @@
         block: |
           - name: default
             user:
-              token: "{{ lookup('file', token_path) }}"
+              token: "{{ lookup('file', kube_token_path) }}"
+      when: kube_token_path is exists
 
-    - name: 🔐 Ajustar permisos de kubeconfig y token
+    - name: 🔐 Ajustar permisos del kubeconfig
       file:
-        path: "{{ item }}"
+        path: "{{ kubeconfig_path }}"
         owner: victory
         group: victory
         mode: '0600'
-      loop:
-        - "{{ kubeconfig_path }}"
-        - "{{ token_path }}"
+
+    - name: 🔐 Ajustar permisos del token.jwt
+      file:
+        path: "{{ kube_token_path }}"
+        owner: victory
+        group: victory
+        mode: '0600'
