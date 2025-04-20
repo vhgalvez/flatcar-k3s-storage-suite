@@ -1,4 +1,3 @@
----
 # playbooks/03_prepare_storage-workers.yml
 ---
 - name: 3 - Preparar almacenamiento en nodos storage y workers
