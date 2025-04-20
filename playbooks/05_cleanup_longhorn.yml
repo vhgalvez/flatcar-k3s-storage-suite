@@ -1,3 +1,4 @@
+---
 - name: ♻️ Limpieza completa de Longhorn en nodos controller, storage y workers
   hosts: controller,storage,workers
   become: true
@@ -8,7 +9,7 @@
 
   pre_tasks:
     - name: ✅ Confirmación requerida
-      ansible.builtin.assert:
+      assert:
         that:
           - confirm_cleanup | default(false) | bool
         fail_msg: "❌ ERROR: Debe confirmar con -e 'confirm_cleanup=yes'"
@@ -16,7 +17,7 @@
 
   tasks:
 
-    # -------------------- CONTROLLER --------------------
+    # CONTROLLER
     - name: 🔧 Instalar jq (requerido para eliminar finalizers)
       raw: |
         which jq || (apt-get update && apt-get install -y jq) || (yum install -y jq)
@@ -66,7 +67,7 @@
         var: longhorn_cleanup_status.stdout_lines
       when: "'controller' in group_names"
 
-    # -------------------- STORAGE --------------------
+    # STORAGE
     - name: 🔌 Desmontar volúmenes NFS y Longhorn
       raw: |
         umount -f /srv/nfs/postgresql || true
@@ -89,8 +90,7 @@
       when: "'storage' in group_names"
 
     - name: 🧨 Eliminar grupo de volúmenes
-      raw: |
-        vgremove -y vg_storage || true
+      raw: vgremove -y vg_storage || true
       when: "'storage' in group_names"
 
     - name: 💣 Borrar firma LVM y tabla de partición
@@ -99,13 +99,12 @@
         parted /dev/vdb rm 1 || true
       when: "'storage' in group_names"
 
-    # -------------------- WORKERS --------------------
+    # WORKERS
     - name: 🧹 Borrar sistema de archivos en /dev/vdb
-      raw: |
-        wipefs -a /dev/vdb || true
+      raw: wipefs -a /dev/vdb || true
       when: "'workers' in group_names"
 
-    # -------------------- FINAL --------------------
+    # FINAL
     - name: ✅ Confirmación final
       debug:
         msg: "✅ Limpieza finalizada correctamente en {{ inventory_hostname }}. Puedes reiniciar el nodo si lo deseas."

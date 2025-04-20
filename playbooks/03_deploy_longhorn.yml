@@ -1,0 +1,73 @@
+---
+- name: 3️⃣ Instalar y validar Longhorn con Helm
+  hosts: controller
+  become: true
+  gather_facts: false
+
+  vars:
+    kubeconfig_path: "/home/victory/.kube/config"
+    helm_bin: "/usr/local/bin/helm"
+    longhorn_namespace: "longhorn-system"
+
+  tasks:
+
+    - name: 🔍 Verificar si existen recursos en el namespace de Longhorn
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        kubectl get all -n {{ longhorn_namespace }} || true
+      register: longhorn_check
+      changed_when: false
+
+    - name: ⚠️ Abortamos si hay residuos de Longhorn
+      fail:
+        msg: |
+          ⚠️ El namespace '{{ longhorn_namespace }}' contiene recursos de una instalación anterior.
+          🧹 Ejecuta: ansible-playbook playbooks/01_prepare_nodes.yml -e "confirm_cleanup=yes"
+          Recursos encontrados:
+          {{ longhorn_check.stdout }}
+      when: "'No resources found' not in longhorn_check.stdout"
+
+    - name: 📥 Añadir y actualizar repositorio Helm de Longhorn
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        {{ helm_bin }} repo add longhorn https://charts.longhorn.io || true
+        {{ helm_bin }} repo update
+
+    - name: 🚀 Instalar Longhorn con Helm
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        {{ helm_bin }} upgrade --install longhorn longhorn/longhorn \
+          --namespace {{ longhorn_namespace }} \
+          --create-namespace \
+          --wait \
+          --timeout 10m0s
+      register: longhorn_install
+      failed_when: longhorn_install.rc != 0
+
+    - name: ⏳ Esperar a que los pods de Longhorn estén listos (máx 5 minutos)
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        kubectl wait --for=condition=Ready pod -n {{ longhorn_namespace }} --all --timeout=300s
+      register: pod_ready
+      failed_when: pod_ready.rc != 0
+
+    - name: 📊 Mostrar estado de los pods de Longhorn
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        kubectl get pods -n {{ longhorn_namespace }}
+      register: pods
+
+    - name: ✅ Pods desplegados
+      debug:
+        var: pods.stdout_lines
+
+    - name: 📄 Validar PVCs y PVs
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        kubectl get pvc -A
+        kubectl get pv
+      register: volumes_info
+
+    - name: 📦 Volúmenes encontrados
+      debug:
+        var: volumes_info.stdout_lines

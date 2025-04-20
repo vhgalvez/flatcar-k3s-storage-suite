@@ -1,6 +1,6 @@
 ---
-# Ruta: playbooks\validate_all.yml
-# ✅ Verificación completa del entorno desplegado con Ansible
+# playbooks\04_validate_cluster.yml
+# ✅ Validación completa del entorno desplegado
 
 - name: ✅ Validar almacenamiento en nodo de storage
   hosts: storage

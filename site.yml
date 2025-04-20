@@ -1,27 +1,12 @@
-# site.yml
 ---
-- name: 📦 Preparar disco de almacenamiento con LVM y exportar NFS
-  hosts: storage
-  become: true
-  gather_facts: false
-  roles:
-    - role: storage_setup
+- name: 🔧 1️⃣ Preparar nodo controlador (kubectl + helm + kubeconfig)
+  import_playbook: playbooks/01_prepare_nodes.yml
 
-- name: 💾 Preparar nodos Longhorn (formatear y montar /dev/vdb)
-  hosts: workers
-  become: true
-  gather_facts: false
-  roles:
-    - role: longhorn_worker
+- name: 💾 2️⃣ Preparar almacenamiento (LVM + NFS + export)
+  import_playbook: playbooks/02_prepare_storage.yml
 
-- name: 🚀 Instalar herramientas locales
-  import_playbook: playbooks/01_install_local_tools.yml
+- name: 🚀 3️⃣ Desplegar y validar Longhorn
+  import_playbook: playbooks/03_deploy_longhorn.yml
 
-- name: 🚀 Configurar kubeconfig
-  import_playbook: playbooks/02_setup_kubeconfig.yml
-
-- name: 🚀 Instalar Longhorn (incluye etiquetado de nodos desde master1)
-  import_playbook: playbooks/install_longhorn.yml
-
-- name: ✅ Validar instalación y configuración de Longhorn y nodos
-  import_playbook: playbooks/validate_all.yml
+- name: ✅ 4️⃣ Validar clúster completo y estado de Longhorn
+  import_playbook: playbooks/04_validate_cluster.yml
