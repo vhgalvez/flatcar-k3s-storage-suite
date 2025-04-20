@@ -18,9 +18,10 @@
 
     - name: 🔍 Verificar si existen recursos en el namespace de Longhorn
       raw: |
-        kubectl get all -n {{ longhorn_namespace }} || true
+        /usr/local/bin/kubectl --kubeconfig {{ kubeconfig_path }} get all -n {{ longhorn_namespace }} || true
       register: longhorn_check
       changed_when: false
+
 
     - name: ⚠️ Abortamos si hay residuos de Longhorn
       fail:
