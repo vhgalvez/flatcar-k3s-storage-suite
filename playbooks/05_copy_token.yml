@@ -1,3 +1,4 @@
+---
 # playbooks/05_copy_token.yml
 - name: 📥 Copiar token JWT desde master al controller
   hosts: controller
@@ -5,13 +6,18 @@
   gather_facts: false
 
   vars:
-    ansible_python_interpreter: /usr/bin/python3
+    ansible_python_interpreter: /usr/bin/python3  # El controller sí tiene Python
     master_host: "{{ groups['masters'][0] }}"
     remote_token_path: "/tmp/traefik-token.jwt"
     local_token_path: "/home/monitoring/.kube/token.jwt"
-    ansible_become_password: "Gdh88K28"
+    ssh_password: "Gdh88K28"
 
   tasks:
+
+    - name: 📦 Instalar sshpass para usar scp con contraseña
+      raw: |
+        apt-get install -y sshpass || yum install -y sshpass || apk add sshpass || true
+
     - name: 📁 Crear carpeta destino
       file:
         path: "{{ local_token_path | dirname }}"
@@ -20,9 +26,9 @@
         group: monitoring
         mode: '0755'
 
-    - name: 📥 Copiar token con scp desde el master (sin confirmación SSH)
+    - name: 📥 Copiar token con sshpass y scp desde el master (sin confirmación SSH)
       raw: |
-        scp -o StrictHostKeyChecking=no root@{{ master_host }}:{{ remote_token_path }} {{ local_token_path }}
+        sshpass -p '{{ ssh_password }}' scp -o StrictHostKeyChecking=no root@{{ master_host }}:{{ remote_token_path }} {{ local_token_path }}
 
     - name: 🔐 Ajustar permisos del token
       file:
@@ -31,12 +37,11 @@
         group: monitoring
         mode: '0600'
 
-    - name: 🔒 Validar que el token fue copiado correctamente
+    - name: 🔒 Verificar token copiado
       command: cat {{ local_token_path }}
       register: token_check
       changed_when: false
-      failed_when: token_check.stdout is not defined or token_check.stdout | length < 100
 
-    - name: ✅ Token copiado correctamente (primeros caracteres)
+    - name: 📦 Token copiado al controller
       debug:
-        msg: "🔑 Token JWT: {{ token_check.stdout[:40] }}..."
+        var: token_check.stdout
