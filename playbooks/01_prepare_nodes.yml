@@ -1,5 +1,4 @@
----
-# playbooks\01_prepare_nodes.yml
+# playbooks/01_prepare_nodes.yml
 - name: 1️⃣ Instalar herramientas necesarias en el nodo controlador
   hosts: controller
   become: true
@@ -11,6 +10,8 @@
     kubectl_path: "/usr/local/bin/kubectl"
     helm_bin: "/usr/local/bin/helm"
     helm_install_path: "/tmp/helm_install"
+    kubeconfig_path: "/home/monitoring/.kube/config"
+    vip_kubernetes: "10.17.5.10"
 
   tasks:
 
@@ -89,3 +90,38 @@
       file:
         path: "{{ helm_install_path }}"
         state: absent
+
+    # 🛠️ Modificar kubeconfig con VIP y autenticación por token
+    - name: 🔁 Reemplazar IP localhost por VIP en kubeconfig
+      replace:
+        path: "{{ kubeconfig_path }}"
+        regexp: '127\.0\.0\.1'
+        replace: "{{ vip_kubernetes }}"
+
+    - name: ❌ Eliminar línea certificate-authority-data
+      lineinfile:
+        path: "{{ kubeconfig_path }}"
+        regexp: '^\s*certificate-authority-data:'
+        state: absent
+
+    - name: ⚠️ Añadir 'insecure-skip-tls-verify'
+      replace:
+        path: "{{ kubeconfig_path }}"
+        regexp: '(^\s*server: https://{{ vip_kubernetes }}:6443)'
+        replace: '\1\n    insecure-skip-tls-verify: true'
+
+    - name: 🧹 Limpiar certificados del kubeconfig
+      lineinfile:
+        path: "{{ kubeconfig_path }}"
+        regexp: '^\s*(client-certificate|client-key):'
+        state: absent
+
+    - name: 🔐 Insertar token JWT en kubeconfig
+      blockinfile:
+        path: "{{ kubeconfig_path }}"
+        marker: "# {mark} ANSIBLE MANAGED TOKEN"
+        insertafter: '^users:$'
+        block: |
+          - name: default
+            user:
+              token: "{{ lookup('file', '/home/monitoring/.kube/token.jwt') }}"
