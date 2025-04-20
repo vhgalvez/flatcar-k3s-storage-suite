@@ -3,15 +3,13 @@
   hosts: masters
   become: true
   gather_facts: false
-
   vars:
     ansible_python_interpreter: /bin/false  # Flatcar no tiene Python
 
   tasks:
-
-    - name: 🔍 Verificar si kubectl está disponible
+    - name: 🔍 Verificar si k3s está disponible
       raw: |
-        command -v k3s && k3s kubectl version --client=true
+        command -v k3s && k3s kubectl version --client
       register: kubectl_check
       failed_when: kubectl_check.rc != 0
 
@@ -20,17 +18,17 @@
         k3s kubectl delete serviceaccount default --ignore-not-found=true --namespace default
       register: sa_delete
 
-    - name: 📦 Resultado de la eliminación del SA default
+    - name: 📦 Resultado de eliminación del SA default
       debug:
         var: sa_delete.stdout_lines
 
-# ⬇️ Generación del token seguro con nueva ServiceAccount
+
 - name: 🔐 0️⃣ Generar token JWT en master con permisos adecuados
   hosts: masters[0]
-  gather_facts: false
   become: true
-
+  gather_facts: false
   vars:
+    ansible_python_interpreter: /bin/false  # Para Flatcar
     kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
     local_token_path: "/tmp/traefik-token.jwt"
     token_duration: "87600h"
@@ -38,44 +36,38 @@
     rolebinding_name: "remote-access-admin"
 
   tasks:
-
-    - name: 🧹 Eliminar ServiceAccount '{{ serviceaccount_name }}' si existe
-      shell: |
+    - name: 🧹 Eliminar ServiceAccount anterior si existe
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
         k3s kubectl delete serviceaccount {{ serviceaccount_name }} --ignore-not-found=true
-      environment:
-        KUBECONFIG: "{{ kubeconfig_path }}"
 
-    - name: 🧹 Eliminar ClusterRoleBinding '{{ rolebinding_name }}' si existe
-      shell: |
+    - name: 🧹 Eliminar ClusterRoleBinding anterior si existe
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
         k3s kubectl delete clusterrolebinding {{ rolebinding_name }} --ignore-not-found=true
-      environment:
-        KUBECONFIG: "{{ kubeconfig_path }}"
 
     - name: 🧾 Crear ServiceAccount '{{ serviceaccount_name }}'
-      shell: |
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
         k3s kubectl create serviceaccount {{ serviceaccount_name }}
-      environment:
-        KUBECONFIG: "{{ kubeconfig_path }}"
 
-    - name: 🔑 Crear ClusterRoleBinding '{{ rolebinding_name }}' con permisos de admin
-      shell: |
+    - name: 🔑 Crear ClusterRoleBinding '{{ rolebinding_name }}'
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
         k3s kubectl create clusterrolebinding {{ rolebinding_name }} \
           --clusterrole=cluster-admin \
           --serviceaccount=default:{{ serviceaccount_name }}
-      environment:
-        KUBECONFIG: "{{ kubeconfig_path }}"
 
-    - name: 🔐 Generar token JWT para ServiceAccount '{{ serviceaccount_name }}'
-      shell: |
+    - name: 🔐 Generar token JWT para '{{ serviceaccount_name }}'
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
         k3s kubectl create token {{ serviceaccount_name }} --duration={{ token_duration }}
-      environment:
-        KUBECONFIG: "{{ kubeconfig_path }}"
       register: token_output
       changed_when: false
 
-    - name: 📄 Guardar token localmente en el master
-      shell: |
-        echo "{{ token_output.stdout }}" > {{ local_token_path }}
+    - name: 📄 Guardar token en archivo
+      raw: |
+        echo '{{ token_output.stdout }}' > {{ local_token_path }}
 
     - name: 🟢 Token generado correctamente
       debug:
