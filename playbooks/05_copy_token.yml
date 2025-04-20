@@ -1,9 +1,9 @@
----
-# playbooks\05_copy_token.yml
+# playbooks/05_copy_token.yml
 - name: 📥 Copiar token JWT desde master al controller
   hosts: controller
   become: true
   gather_facts: false
+
   vars:
     ansible_python_interpreter: /usr/bin/python3  # El controller sí tiene Python
     master_host: "{{ groups['masters'][0] }}"
@@ -19,9 +19,9 @@
         group: monitoring
         mode: '0755'
 
-    - name: 📥 Copiar token con scp desde el master
+    - name: 📥 Copiar token con scp desde el master (sin confirmación SSH)
       raw: |
-        scp root@{{ master_host }}:{{ remote_token_path }} {{ local_token_path }}
+        scp -o StrictHostKeyChecking=no root@{{ master_host }}:{{ remote_token_path }} {{ local_token_path }}
 
     - name: 🔐 Ajustar permisos del token
       file:
