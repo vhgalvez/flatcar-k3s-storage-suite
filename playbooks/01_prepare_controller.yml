@@ -1,5 +1,4 @@
 # playbooks/01_prepare_nodes.yml
-# playbooks/01_prepare_nodes.yml
 - name: 1️⃣ Instalar herramientas necesarias en el nodo controlador
   hosts: controller
   become: true
@@ -12,7 +11,8 @@
     helm_bin: "/usr/local/bin/helm"
     helm_install_path: "/tmp/helm_install"
     kubeconfig_path: "/home/victory/.kube/config"
-    kubeconfig_token_path: "/home/victory/.kube/token.jwt"
+    token_file: "/home/victory/.kube/token.jwt"
+    vip_kubernetes: "10.17.5.10"
 
   tasks:
 
@@ -66,12 +66,18 @@
         dest: "{{ helm_install_path }}"
         remote_src: yes
 
+    - name: 🗂 Verificar existencia del binario Helm
+      stat:
+        path: "{{ helm_install_path }}/linux-amd64/helm"
+      register: helm_bin_check
+
     - name: ✅ Mover Helm a {{ helm_bin }}
       copy:
         src: "{{ helm_install_path }}/linux-amd64/helm"
         dest: "{{ helm_bin }}"
-        remote_src: yes
         mode: '0755'
+        remote_src: yes
+      when: helm_bin_check.stat.exists
 
     - name: 🧪 Verificar versión de Helm
       command: "{{ helm_bin }} version"
@@ -86,56 +92,57 @@
         path: "{{ helm_install_path }}"
         state: absent
 
-    - name: 📁 Crear directorio .kube si no existe
+    ### KUBECONFIG SETUP
+
+    - name: 📁 Crear carpeta .kube si no existe
       file:
-        path: "/home/victory/.kube"
+        path: "{{ kubeconfig_path | dirname }}"
         state: directory
         owner: victory
         group: victory
-        mode: '0755'
+        mode: '0700'
 
-    - name: 🧼 Eliminar usuarios duplicados llamados "default" en kubeconfig
+    - name: 📄 Crear archivo kubeconfig si no existe
+      copy:
+        dest: "{{ kubeconfig_path }}"
+        content: |
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - cluster:
+              server: https://{{ vip_kubernetes }}:6443
+              insecure-skip-tls-verify: true
+            name: default
+          contexts:
+          - context:
+              cluster: default
+              user: default
+            name: default
+          current-context: default
+          users: []
+        owner: victory
+        group: victory
+        mode: '0600'
+      when: not kubeconfig_path is file
+
+    - name: 🧹 Limpiar client-certificate, client-key y token antiguos
       lineinfile:
         path: "{{ kubeconfig_path }}"
-        regexp: '^\s*- name: default$'
-        state: absent
-      when: kubeconfig_path is defined
-
-    - name: 🔁 Reemplazar IP localhost por VIP en kubeconfig
-      replace:
-        path: "{{ kubeconfig_path }}"
-        regexp: '127\.0\.0\.1'
-        replace: "{{ vip_kubernetes }}"
-
-    - name: ❌ Eliminar línea certificate-authority-data
-      lineinfile:
-        path: "{{ kubeconfig_path }}"
-        regexp: '^\s*certificate-authority-data:'
+        regexp: '^\s*(client-certificate|client-key|token):'
         state: absent
 
-    - name: ⚠️ Añadir 'insecure-skip-tls-verify'
-      replace:
-        path: "{{ kubeconfig_path }}"
-        regexp: '(^\s*server: https://{{ vip_kubernetes }}:6443)'
-        replace: '\1\n    insecure-skip-tls-verify: true'
-
-    - name: 🧹 Limpiar certificados client-certificate y client-key
-      lineinfile:
-        path: "{{ kubeconfig_path }}"
-        regexp: '^\s*(client-certificate|client-key):'
-        state: absent
-
-    - name: 🔐 Insertar token JWT en kubeconfig
+    - name: 🔐 Insertar token JWT actualizado
       blockinfile:
         path: "{{ kubeconfig_path }}"
         marker: "# {mark} ANSIBLE MANAGED TOKEN"
-        insertafter: '^users:$'
+        insertafter: '^users:'
         block: |
           - name: default
             user:
-              token: "{{ lookup('file', kubeconfig_token_path) }}"
+              token: "{{ lookup('file', token_file) }}"
+      when: token_file is file
 
-    - name: 🔒 Establecer permisos correctos del kubeconfig
+    - name: 👮 Ajustar permisos finales de .kube
       file:
         path: "{{ kubeconfig_path }}"
         owner: victory
