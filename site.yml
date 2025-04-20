@@ -1,4 +1,7 @@
 ---
+- name: 🔐 0️⃣ Generar token JWT desde master y copiar a controller
+  import_playbook: playbooks/00_generate_token.yml
+  
 - name: 🔧 1️⃣ Preparar nodo controlador (kubectl + helm + kubeconfig)
   import_playbook: playbooks/01_prepare_nodes.yml
 

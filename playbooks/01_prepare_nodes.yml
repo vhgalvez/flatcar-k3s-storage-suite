@@ -1,4 +1,5 @@
 ---
+# playbooks\01_prepare_nodes.yml
 - name: 1️⃣ Instalar herramientas necesarias en el nodo controlador
   hosts: controller
   become: true
