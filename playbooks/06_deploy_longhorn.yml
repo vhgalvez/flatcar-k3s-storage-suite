@@ -10,10 +10,6 @@
     helm_bin: "/usr/local/bin/helm"
     longhorn_namespace: "longhorn-system"
 
-  environment:
-    PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
-    KUBECONFIG: "{{ kubeconfig_path }}"
-
   pre_tasks:
 
     - name: 🔍 Verificar si existen recursos en el namespace de Longhorn
@@ -38,11 +34,12 @@
     - name: 📥 Añadir y actualizar repositorio Helm de Longhorn
       raw: |
         {{ helm_bin }} repo add longhorn https://charts.longhorn.io || true
-        {{ helm_bin }} repo update
+        {{ helm_bin }} repo update --kubeconfig {{ kubeconfig_path }}
 
     - name: 🚀 Instalar Longhorn con Helm
       raw: |
         {{ helm_bin }} upgrade --install longhorn longhorn/longhorn \
+          --kubeconfig {{ kubeconfig_path }} \
           --namespace {{ longhorn_namespace }} \
           --create-namespace \
           --wait \
