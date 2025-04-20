@@ -1,22 +1,17 @@
 # site.yml
 ---
-- name: 🔧 1️⃣ Preparar nodo controlador (kubectl + helm + kubeconfig)
-  import_playbook: playbooks/01_prepare_controller.yml
 
-- name: 💾 2️⃣ Preparar almacenamiento (LVM + NFS + export)
-  import_playbook: playbooks/02_prepare_storage.yml
+- name: 🔐 1 - Generar token JWT en master con permisos correctos
+  import_playbook: playbooks/01_generate_token.yml
 
-- name: 🧹 3️⃣ Eliminar ServiceAccount 'default' (opcional)
-  import_playbook: playbooks/03_cleanup_default_sa.yml
+- name: 🔧 2 - Preparar nodo controlador (kubectl + helm + kubeconfig + token)
+  import_playbook: playbooks/02_prepare_controller.yml
 
-- name: 🔐 4️⃣ Generar token JWT en master con permisos correctos
-  import_playbook: playbooks/04_generate_token.yml
+- name: 💾 3 - Preparar almacenamiento en nodo storage y workers
+  import_playbook: playbooks/03_prepare_storage-workers.yml
 
-- name: 📥 5️⃣ Copiar token JWT al nodo controlador
-  import_playbook: playbooks/05_copy_token.yml
+- name: 🚀 4 - Desplegar Longhorn desde controller
+  import_playbook: playbooks/04_deploy_longhorn.yml
 
-- name: 🚀 6️⃣ Desplegar y validar Longhorn
-  import_playbook: playbooks/06_deploy_longhorn.yml
-
-- name: ✅ 7️⃣ Validar clúster completo y estado de Longhorn
-  import_playbook: playbooks/07_validate_cluster.yml
+- name: ✅ 5 - Validar clúster y estado de Longhorn
+  import_playbook: playbooks/05_validate_cluster.yml

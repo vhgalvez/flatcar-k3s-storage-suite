@@ -1,0 +1,87 @@
+---
+# playbooks\06_cleanup_longhorn.yml
+- name: ♻️ Limpieza completa de Longhorn en controller, storage y workers
+  hosts: controller,storage,workers
+  become: true
+  gather_facts: false
+
+  vars:
+    kubeconfig_path: "/home/victory/.kube/config"
+
+  pre_tasks:
+    - name: ✅ Confirmación requerida
+      assert:
+        that:
+          - confirm_cleanup | default(false) | bool
+        fail_msg: "❌ ERROR: Debe confirmar con -e 'confirm_cleanup=yes'"
+        success_msg: "🧹 Confirmación recibida en {{ inventory_hostname }}"
+
+    - name: 🛑 Verificar que /dev/vdb no esté montado como disco del sistema
+      raw: |
+        mount | grep /dev/vdb | grep -E '/($|/boot|/home)' && exit 1 || exit 0
+      register: vdb_mount_check
+      failed_when: vdb_mount_check.rc != 0
+      changed_when: false
+      ignore_errors: false
+      when: "'storage' in group_names or 'workers' in group_names"
+      tags: safety
+
+  tasks:
+
+    ## CONTROLLER ...
+
+    ## [MISMA LÓGICA DEL CONTROLLER QUE YA TIENES] ##
+
+    ## STORAGE
+    - name: 🔌 Desmontar volúmenes en storage
+      raw: |
+        umount -f /srv/nfs/postgresql || true
+        umount -f /srv/nfs/shared || true
+        umount -f /mnt/longhorn-disk || true
+      ignore_errors: true
+      when: "'storage' in group_names"
+
+    - name: 🛑 Detener y deshabilitar servicio NFS
+      raw: |
+        systemctl stop nfs-server || rc-service nfs stop || true
+        systemctl disable nfs-server || true
+      ignore_errors: true
+      when: "'storage' in group_names"
+
+    - name: 🧹 Borrar contenido de /srv/nfs y /mnt/longhorn-disk
+      raw: |
+        rm -rf /srv/nfs/* /mnt/longhorn-disk/*
+      ignore_errors: true
+      when: "'storage' in group_names"
+
+    - name: 🗑️ Eliminar volúmenes lógicos
+      raw: |
+        lvremove -fy /dev/vg_storage/postgres_lv || true
+        lvremove -fy /dev/vg_storage/shared_lv || true
+        lvremove -fy /dev/vg_storage/longhorn_lv || true
+      ignore_errors: true
+      when: "'storage' in group_names"
+
+    - name: 🧱 Eliminar grupo de volúmenes
+      raw: vgremove -fy vg_storage || true
+      ignore_errors: true
+      when: "'storage' in group_names"
+
+    - name: 💣 Borrar firmas y partición
+      raw: |
+        pvremove -y /dev/vdb1 || true
+        parted /dev/vdb rm 1 || true
+        wipefs -a /dev/vdb || true
+      ignore_errors: true
+      when: "'storage' in group_names"
+
+    ## WORKER
+    - name: 💥 Borrar sistema de archivos en /dev/vdb (workers)
+      raw: wipefs -a /dev/vdb || true
+      ignore_errors: true
+      when: "'workers' in group_names"
+
+    # FINAL
+    - name: ✅ Confirmación final
+      debug:
+        msg: "✅ Limpieza finalizada en {{ inventory_hostname }}. Puedes reiniciar este nodo si lo deseas."

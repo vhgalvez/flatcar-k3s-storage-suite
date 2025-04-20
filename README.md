@@ -102,7 +102,7 @@ Si necesitas **reiniciar desde cero** los discos de los nodos de almacenamiento 
 
 ### ▶️ Ejecución real:
 ```bash
-sudo ansible-playbook playbooks/05_cleanup_longhorn.yml -i inventory/hosts.ini -e "confirm_cleanup=yes"
+sudo ansible-playbook playbooks/06_cleanup_longhorn.yml -i inventory/hosts.ini -e "confirm_cleanup=yes"
 ```
 
 ### 🔍 Ejecución en modo verificación (no realiza cambios):
