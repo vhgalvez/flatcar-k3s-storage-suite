@@ -1,127 +1,57 @@
 # playbooks\03_prepare_storage-workers.yml
 ---
-- name: 3 - Preparar almacenamiento en nodos storage y workers
+- name: 💣 Limpiar completamente /dev/vdb en storage y workers
   hosts: storage,workers
   gather_facts: false
   become: true
 
   tasks:
-    # === VALIDACIÓN INICIAL SEGURA ===
 
-    - name: 🔒 Bloquear si /dev/vdb está montado (para evitar sobrescritura)
+    - name: 🔍 Mostrar si hay montajes activos en /dev/vdb
+      raw: mount | grep vdb || true
+
+    - name: 💣 Desmontar volúmenes y esperar
       raw: |
-        mount | grep -q '^/dev/vdb' && echo "❌ /dev/vdb está montado. Abortando." && exit 1 || exit 0
-      register: vdb_mount_check
-      failed_when: vdb_mount_check.rc != 0
-      changed_when: false
-      tags: safety
+        umount -f /mnt/longhorn-disk 2>/dev/null || true
+        umount -f /srv/nfs/postgresql 2>/dev/null || true
+        umount -f /srv/nfs/shared 2>/dev/null || true
+        sleep 2
+      ignore_errors: true
 
-    - name: ❌ Bloquear si /dev/vdb tiene particiones o LVM activas
-      raw: |
-        lsblk -no TYPE /dev/vdb | grep -qE 'part|lvm' && echo "❌ /dev/vdb tiene particiones o LVM activas. Abortando." && exit 1 || exit 0
-      register: vdb_lvm_check
-      failed_when: vdb_lvm_check.rc != 0
-      changed_when: false
-      tags: safety
-
-    - name: 📀 Verificar existencia del disco /dev/vdb
-      raw: test -b /dev/vdb
-      register: disk_check
-      failed_when: disk_check.rc != 0
-      changed_when: false
-
-    # === STORAGE ONLY ===
-
-    - name: 🧹 Crear tabla de particiones GPT (solo storage)
-      raw: parted -s /dev/vdb mklabel gpt
-      when: "'storage' in group_names"
-
-    - name: 📏 Crear partición primaria 100% (solo storage)
-      raw: parted -s /dev/vdb mkpart primary 0% 100%
-      when: "'storage' in group_names"
-
-    - name: ⏳ Esperar a que /dev/vdb1 aparezca (solo storage)
+    - name: ⏳ Esperar a que /dev/vdb ya no esté montado
       raw: |
         for i in $(seq 1 5); do
-          test -b /dev/vdb1 && exit 0
+          mount | grep -q vdb || exit 0
           sleep 1
         done
         exit 1
-      register: wait_partition
-      failed_when: wait_partition.rc != 0
-      when: "'storage' in group_names"
+      register: umount_check
+      failed_when: umount_check.rc != 0
+      changed_when: false
 
-    - name: 💽 Crear volumen físico LVM (solo storage)
-      raw: pvcreate -ff -y /dev/vdb1
-      when: "'storage' in group_names"
-
-    - name: 🧱 Crear grupo de volúmenes (solo storage)
-      raw: vgcreate vg_storage /dev/vdb1
-      when: "'storage' in group_names"
-
-    - name: 📦 Crear volúmenes lógicos (PostgreSQL, Shared, Longhorn)
+    - name: ❌ Detener servicios que puedan bloquear el disco (opcional)
       raw: |
-        lvcreate -y -L 20G -n postgres_lv vg_storage
-        lvcreate -y -L 20G -n shared_lv vg_storage
-        lvcreate -y -l 100%FREE -n longhorn_lv vg_storage
+        systemctl stop nfs-server || true
+        systemctl stop iscsid || true
       when: "'storage' in group_names"
 
-    - name: 🧹 Formatear volúmenes como ext4 (solo storage)
+    - name: 🧹 Eliminar volúmenes LVM (si existen)
       raw: |
-        mkfs.ext4 -F /dev/vg_storage/postgres_lv
-        mkfs.ext4 -F /dev/vg_storage/shared_lv
-        mkfs.ext4 -F /dev/vg_storage/longhorn_lv
-      when: "'storage' in group_names"
+        lvremove -f /dev/vg_storage/postgres_lv 2>/dev/null || true
+        lvremove -f /dev/vg_storage/shared_lv 2>/dev/null || true
+        lvremove -f /dev/vg_storage/longhorn_lv 2>/dev/null || true
+        sleep 1
 
-    - name: 📁 Crear directorios de montaje (solo storage)
-      raw: mkdir -p /srv/nfs/postgresql /srv/nfs/shared /mnt/longhorn-disk
-      when: "'storage' in group_names"
+    - name: 🧱 Eliminar grupo de volúmenes
+      raw: vgremove -f vg_storage 2>/dev/null || true
 
-    - name: 🔗 Montar volúmenes en storage
+    - name: 💽 Eliminar volumen físico
+      raw: pvremove -f /dev/vdb1 2>/dev/null || true
+
+    - name: ❎ Eliminar partición y limpiar firmas
       raw: |
-        mount /dev/vg_storage/postgres_lv /srv/nfs/postgresql
-        mount /dev/vg_storage/shared_lv /srv/nfs/shared
-        mount /dev/vg_storage/longhorn_lv /mnt/longhorn-disk
-      when: "'storage' in group_names"
+        parted -s /dev/vdb rm 1 2>/dev/null || true
+        wipefs -a /dev/vdb 2>/dev/null || true
 
-    - name: 📦 Instalar servidor NFS (solo storage)
-      raw: |
-        which exportfs >/dev/null 2>&1 || \
-        (apk add nfs-utils || yum install -y nfs-utils || apt-get install -y nfs-kernel-server)
-      when: "'storage' in group_names"
-
-    - name: 📝 Configurar /etc/exports para NFS
-      raw: |
-        echo "/srv/nfs/postgresql *(rw,sync,no_subtree_check,no_root_squash)" > /etc/exports
-        echo "/srv/nfs/shared *(rw,sync,no_subtree_check,no_root_squash)" >> /etc/exports
-      when: "'storage' in group_names"
-
-    - name: 🔄 Habilitar y reiniciar NFS (solo storage)
-      raw: |
-        (systemctl enable nfs-server && systemctl restart nfs-server) || rc-service nfs restart || true
-      when: "'storage' in group_names"
-
-    # === WORKERS ONLY ===
-
-    - name: 💽 Formatear /dev/vdb como ext4 (solo workers)
-      raw: mkfs.ext4 -F /dev/vdb
-      when: "'workers' in group_names"
-
-    - name: 📁 Crear punto de montaje para Longhorn (solo workers)
-      raw: mkdir -p /mnt/longhorn-disk
-      when: "'workers' in group_names"
-
-    - name: 🔗 Montar /dev/vdb en /mnt/longhorn-disk (solo workers)
-      raw: mount /dev/vdb /mnt/longhorn-disk
-      when: "'workers' in group_names"
-
-    # === VALIDACIÓN GENERAL ===
-
-    - name: ✅ Validar montaje final
-      raw: df -h | grep -E "/srv/nfs/postgresql|/srv/nfs/shared|/mnt/longhorn-disk"
-      register: mount_check
-      failed_when: mount_check.rc != 0
-
-    - name: 🟢 Mostrar estado de montajes
-      debug:
-        var: mount_check.stdout_lines
+    - name: 🧼 Esperar a que el sistema asiente los cambios
+      raw: udevadm settle
