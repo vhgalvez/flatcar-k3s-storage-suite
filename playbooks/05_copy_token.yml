@@ -1,24 +1,17 @@
 # playbooks/05_copy_token.yml
-- name: 📥 Copiar token JWT desde master al controller
+---
+- name: 📥 Copiar token JWT desde master y guardarlo en controller
   hosts: controller
   become: true
   gather_facts: false
 
   vars:
-    ansible_python_interpreter: /usr/bin/python3
-    master_host: "{{ hostvars[groups['masters'][0]]['ansible_host'] }}"
+    ansible_python_interpreter: /usr/bin/python3  # El controller tiene Python
+    master_host: "{{ groups['masters'][0] }}"
     remote_token_path: "/tmp/traefik-token.jwt"
     local_token_path: "/home/monitoring/.kube/token.jwt"
-    ssh_user: "root"
-    ssh_password: "Gdh88K28"  # Contraseña del nodo controller si hicieras ssh inverso
 
   tasks:
-
-    - name: 📦 Instalar sshpass para usar scp con contraseña
-      become: true
-      package:
-        name: sshpass
-        state: present
 
     - name: 📁 Crear carpeta destino
       file:
@@ -28,15 +21,14 @@
         group: monitoring
         mode: '0755'
 
-    - name: 📥 Copiar token con sshpass y scp desde el master
-      become: true
-      raw: |
-        sshpass -p '{{ ssh_password }}' scp -o StrictHostKeyChecking=no \
-          {{ ssh_user }}@{{ master_host }}:{{ remote_token_path }} {{ local_token_path }}
+    - name: 🔍 Obtener contenido del token generado en el master
+      set_fact:
+        token_value: "{{ hostvars[master_host]['token_output']['stdout'] | trim }}"
 
-    - name: 🔐 Ajustar permisos del token
-      file:
-        path: "{{ local_token_path }}"
+    - name: 📄 Escribir token en archivo local
+      copy:
+        content: "{{ token_value }}"
+        dest: "{{ local_token_path }}"
         owner: monitoring
         group: monitoring
         mode: '0600'
