@@ -3,16 +3,17 @@
   hosts: masters[0]
   gather_facts: false
   become: true
+
   vars:
     kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
     token_path_shared: "/srv/nfs/shared/traefik-token.jwt"
     token_duration: "87600h"  # 10 años
 
   tasks:
-    - name: 🔐 Generar token JWT para usuario 'default'
+    - name: 🔐 Generar token JWT para usuario 'default' con k3s
       raw: |
         export KUBECONFIG={{ kubeconfig_path }}
-        /usr/local/bin/kubectl create token default --duration={{ token_duration }}
+        k3s kubectl create token default --duration={{ token_duration }}
       register: token_output
       changed_when: false
 
@@ -26,8 +27,8 @@
 
 - name: 📥 Copiar token JWT desde NFS al controller
   hosts: controller
-  gather_facts: false
   become: true
+  gather_facts: false
 
   vars:
     token_path_shared: "/srv/nfs/shared/traefik-token.jwt"
