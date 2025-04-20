@@ -25,12 +25,16 @@
       debug:
         var: token_output.stdout
 
+
 - name: 📥 Copiar token JWT desde master al controller
   hosts: controller
   gather_facts: false
   become: true
 
   vars:
+    ssh_key_path: "/root/.ssh/cluster_k3s/shared/id_rsa_shared_cluster"
+    ssh_user: "core"
+    master_ip: "{{ groups['masters'][0] }}"
     local_token_path: "/tmp/traefik-token.jwt"
     token_dest: "/home/monitoring/.kube/token.jwt"
 
@@ -43,17 +47,14 @@
         group: monitoring
         mode: '0755'
 
-    - name: 📥 Copiar token desde master vía delegate_to
-      ansible.builtin.fetch:
-        src: "{{ local_token_path }}"
-        dest: "/tmp/token.jwt"
-        flat: yes
-      delegate_to: "{{ groups['masters'][0] }}"
+    - name: 📥 Copiar token con scp desde el master
+      raw: |
+        scp -i {{ ssh_key_path }} -o StrictHostKeyChecking=no {{ ssh_user }}@{{ master_ip }}:{{ local_token_path }} {{ token_dest }}
+      become: false
 
-    - name: 🚚 Mover token a destino final
-      copy:
-        src: "/tmp/token.jwt"
-        dest: "{{ token_dest }}"
+    - name: 🔐 Ajustar permisos del token
+      file:
+        path: "{{ token_dest }}"
         owner: monitoring
         group: monitoring
         mode: '0600'
