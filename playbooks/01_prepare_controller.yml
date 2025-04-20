@@ -43,7 +43,7 @@
     - name: 🔍 Verificar instalación de kubectl
       command: "{{ kubectl_path }} version --client"
       register: kubectl_output
-      ignore_errors: yes
+      ignore_errors: true
 
     - name: 📊 Mostrar salida de kubectl
       debug:
@@ -91,36 +91,64 @@
         path: "{{ helm_install_path }}"
         state: absent
 
-    # 🛠️ Modificar kubeconfig con VIP y autenticación por token
-    - name: 🔁 Reemplazar IP localhost por VIP en kubeconfig
-      replace:
-        path: "{{ kubeconfig_path }}"
-        regexp: '127\.0\.0\.1'
-        replace: "{{ vip_kubernetes }}"
+    # 🛠️ Configurar kubeconfig con VIP y token JWT
 
-    - name: ❌ Eliminar línea certificate-authority-data
+    - name: 📄 Verificar si el archivo kubeconfig ya existe
+      stat:
+        path: "{{ kubeconfig_path }}"
+      register: kubeconfig_stat
+
+    - name: 📁 Crear carpeta para kubeconfig si no existe
+      file:
+        path: "{{ kubeconfig_path | dirname }}"
+        state: directory
+        mode: '0700'
+      when: not kubeconfig_stat.stat.exists
+
+    - name: 📄 Crear archivo kubeconfig si no existe
+      copy:
+        dest: "{{ kubeconfig_path }}"
+        content: |
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - cluster:
+              server: https://{{ vip_kubernetes }}:6443
+              insecure-skip-tls-verify: true
+            name: default
+          contexts:
+          - context:
+              cluster: default
+              user: default
+            name: default
+          current-context: default
+          users: []
+        mode: '0600'
+      when: not kubeconfig_stat.stat.exists
+
+    - name: 🧹 Eliminar client-certificate, client-key o token antiguos
       lineinfile:
         path: "{{ kubeconfig_path }}"
-        regexp: '^\s*certificate-authority-data:'
+        regexp: '^\s*(client-certificate|client-key|token):'
         state: absent
 
-    - name: ⚠️ Añadir 'insecure-skip-tls-verify'
-      replace:
+    - name: 🛠 Asegurar configuración del cluster con VIP
+      blockinfile:
         path: "{{ kubeconfig_path }}"
-        regexp: '(^\s*server: https://{{ vip_kubernetes }}:6443)'
-        replace: '\1\n    insecure-skip-tls-verify: true'
+        block: |
+          clusters:
+          - cluster:
+              server: https://{{ vip_kubernetes }}:6443
+              insecure-skip-tls-verify: true
+            name: default
+        marker: "# {mark} ANSIBLE MANAGED CLUSTER CONFIG"
+        insertafter: '^apiVersion:'
 
-    - name: 🧹 Limpiar certificados del kubeconfig
-      lineinfile:
-        path: "{{ kubeconfig_path }}"
-        regexp: '^\s*(client-certificate|client-key):'
-        state: absent
-
-    - name: 🔐 Insertar token JWT en kubeconfig
+    - name: 🔐 Insertar token JWT
       blockinfile:
         path: "{{ kubeconfig_path }}"
         marker: "# {mark} ANSIBLE MANAGED TOKEN"
-        insertafter: '^users:$'
+        insertafter: '^users:'
         block: |
           - name: default
             user:
