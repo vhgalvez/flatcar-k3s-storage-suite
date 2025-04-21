@@ -16,7 +16,8 @@
         export KUBECONFIG={{ kubeconfig_path }}
         echo "🧹 Eliminando cualquier release de '{{ release_name }}' de Helm..."
         {{ helm_bin }} uninstall {{ release_name }} -n {{ namespace }} || true
-      changed_when: true  # Siempre consideramos que hubo un cambio porque eliminamos la release
+      changed_when: true
+
 
 - name: 🧼 2 - Borrar recursos del namespace Longhorn + eliminar CRDs
   hosts: controller
@@ -39,8 +40,8 @@
         export KUBECONFIG={{ kubeconfig_path }}
         {{ kubectl_bin }} delete all --all -n {{ namespace }} --ignore-not-found
         {{ kubectl_bin }} delete pvc --all -n {{ namespace }} --ignore-not-found
-        {{ kubectl_bin }} delete pv --all -n {{ namespace }} --ignore-not-found
-        echo "🧹 Recursos de Longhorn eliminados del namespace {{ namespace }}."
+        {{ kubectl_bin }} delete pv --all --ignore-not-found
+        echo "🧹 Recursos eliminados de {{ namespace }}."
       changed_when: true
 
     - name: 💣 Eliminar CRDs Longhorn forzadamente con patch (con progreso)
@@ -49,37 +50,41 @@
         echo "🧹 Iniciando eliminación de CRDs de Longhorn..."
         for crd in $({{ kubectl_bin }} get crd -o name | grep 'longhorn.io'); do
           name=$(basename "$crd")
-          echo ""
           echo "🔧 Procesando CRD: $name"
           {{ kubectl_bin }} get crd "$name" || echo "⚠️ CRD $name ya no existe"
           echo "🔄 Quitando finalizers..."
           timeout 30 {{ kubectl_bin }} patch crd "$name" -p '{"metadata":{"finalizers":[]}}' --type=merge || echo "⚠️ Error al quitar finalizers de $name"
-          sleep 1
           echo "❌ Eliminando CRD $name..."
-          timeout 30 {{ kubectl_bin }} delete crd "$name" --grace-period=0 --force || echo "⚠️ Error al eliminar $name (posible bloqueo)"
-          echo "✅ $name eliminado."
-          sleep 1
+          timeout 30 {{ kubectl_bin }} delete crd "$name" --grace-period=0 --force || echo "⚠️ Error al eliminar $name"
         done
-        echo ""
         echo "✅ Todos los CRDs de Longhorn fueron procesados."
       register: crd_cleanup
       changed_when: "'eliminado' in crd_cleanup.stdout or 'deleted' in crd_cleanup.stdout"
       failed_when: false
 
-    - name: 🧨 Forzar eliminación del namespace si está en estado Terminating
+    - name: 🧨 Forzar eliminación del namespace si tiene finalizers
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        ns_status=$({{ kubectl_bin }} get ns {{ namespace }} -o json | jq -r .status.phase)
-        if [ "$ns_status" == "Terminating" ]; then
-          {{ kubectl_bin }} get namespace {{ namespace }} -o json | jq 'del(.spec.finalizers)' > /tmp/tmp-ns.json
+        if {{ kubectl_bin }} get ns {{ namespace }} -o json | jq -e '.spec.finalizers | length > 0' > /dev/null; then
+          echo "⚠️ Eliminando finalizers del namespace {{ namespace }}..."
+          {{ kubectl_bin }} get ns {{ namespace }} -o json | jq 'del(.spec.finalizers)' > /tmp/tmp-ns.json
           {{ kubectl_bin }} replace --raw "/api/v1/namespaces/{{ namespace }}/finalize" -f /tmp/tmp-ns.json || true
           rm -f /tmp/tmp-ns.json
         fi
-      changed_when: false
+      changed_when: true
+      failed_when: false
 
-    - name: 🧾 Mostrar resumen de CRDs eliminados
+    - name: ❌ Eliminar el namespace completamente
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        {{ kubectl_bin }} delete namespace {{ namespace }} --ignore-not-found
+      changed_when: true
+      failed_when: false
+
+    - name: 🧾 Mostrar resumen de limpieza de CRDs
       debug:
         var: crd_cleanup.stdout_lines
+
 
 - name: 💽 3 - Limpiar completamente /dev/vdb en storage y workers
   hosts: storage,workers
