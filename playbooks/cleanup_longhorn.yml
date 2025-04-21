@@ -1,5 +1,4 @@
 # playbooks\cleanup_longhorn.yml
----
 - name: 💣 Limpiar completamente /dev/vdb en storage y workers
   hosts: storage,workers
   gather_facts: false
@@ -83,7 +82,7 @@
         {{ kubectl_bin }} delete deployment,daemonset,pod -n {{ namespace }} --all --ignore-not-found
       changed_when: false
 
-    - name: 🧨 Forzar eliminación con jq si el namespace está en Terminating
+    - name: 🧨 Forzar eliminación del namespace si está en estado Terminating
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
         ns_status=$({{ kubectl_bin }} get ns {{ namespace }} -o json | jq -r .status.phase)
@@ -94,10 +93,15 @@
         fi
       changed_when: false
 
-    - name: 💣 Eliminar CRDs relacionadas con Longhorn
+    - name: 💣 Eliminar CRDs Longhorn forzadamente con patch
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        {{ kubectl_bin }} get crds | grep longhorn.io | awk '{print $1}' | xargs -r {{ kubectl_bin }} delete crd || true
+        for crd in $({{ kubectl_bin }} get crd -o name | grep longhorn.io); do
+          name=$(basename $crd)
+          echo "🔧 Eliminando $name..."
+          {{ kubectl_bin }} patch crd $name -p '{"metadata":{"finalizers":[]}}' --type=merge || true
+          {{ kubectl_bin }} delete crd $name --grace-period=0 --force || true
+        done
       changed_when: false
 
     - name: 🧹 Desinstalar Helm release (si existe)
