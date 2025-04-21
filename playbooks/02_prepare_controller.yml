@@ -90,7 +90,7 @@
       file:
         path: "{{ helm_install_tmp }}"
         state: directory
-        mode: '0755'
+        mode: "0755"
 
     - name: 📥 Descargar Helm {{ helm_version }}
       get_url:
@@ -116,7 +116,7 @@
         state: absent
 
     - name: 🧪 Verificar acceso a Kubernetes
-      command: kubectl get nodes
+      command: "{{ kubectl_path }} get nodes"
       environment:
         KUBECONFIG: "{{ kubeconfig_path }}"
       register: kubectl_nodes
