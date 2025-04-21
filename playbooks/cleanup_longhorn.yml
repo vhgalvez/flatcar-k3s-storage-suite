@@ -56,6 +56,20 @@
       changed_when: true
       failed_when: false
 
+    - name: 🔍 Verificar si los CRDs de Longhorn fueron eliminados
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        crd_check=$(kubectl get crd | grep 'longhorn.io')
+        if [ -n "$crd_check" ]; then
+          echo "⚠️ Los CRDs de Longhorn aún existen: $crd_check"
+          exit 1
+        else
+          echo "✅ Los CRDs de Longhorn fueron eliminados correctamente."
+        fi
+      register: crd_verification
+      failed_when: crd_verification.rc != 0
+      changed_when: false
+
     - name: 🧨 Verificar y eliminar finalizers del namespace si existen
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
