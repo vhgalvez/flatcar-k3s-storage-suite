@@ -22,7 +22,6 @@
         fi
       changed_when: false
 
-
 - name: 🧼 2 - Borrar recursos del namespace Longhorn + eliminar CRDs
   hosts: controller
   become: true
@@ -84,7 +83,6 @@
     - name: 🧾 Mostrar resumen de CRDs eliminados
       debug:
         var: crd_cleanup.stdout_lines
-
 
 - name: 💽 3 - Limpiar completamente /dev/vdb en storage y workers
   hosts: storage,workers
