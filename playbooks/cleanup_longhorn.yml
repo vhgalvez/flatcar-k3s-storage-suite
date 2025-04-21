@@ -24,58 +24,48 @@
       failed_when: false
       changed_when: false
 
-- name: 💣 2 - Eliminar Helm release de Longhorn (si existe)
-  hosts: controller
-  become: true
-  gather_facts: false
-  when: longhorn_ns_check.rc == 0
+    - name: 💣 2 - Eliminar Helm release de Longhorn (si existe)
+      when: longhorn_ns_check.rc == 0
+      vars:
+        kubeconfig_path: "/home/victory/.kube/config"
+        helm_bin: "/usr/local/bin/helm"
+        namespace: "longhorn-system"
+        release_name: "longhorn"
+      tasks:
+        - name: 🧹 Desinstalar release de Helm si existe
+          shell: |
+            export KUBECONFIG={{ kubeconfig_path }}
+            {{ helm_bin }} uninstall {{ release_name }} -n {{ namespace }} || true
+          changed_when: true
+          ignore_errors: true # Permitir que falle si el release no existe
 
-  vars:
-    kubeconfig_path: "/home/victory/.kube/config"
-    helm_bin: "/usr/local/bin/helm"
-    namespace: "longhorn-system"
-    release_name: "longhorn"
+    - name: 🧼 3 - Borrar todos los recursos del namespace Longhorn
+      when: longhorn_ns_check.rc == 0
+      vars:
+        kubeconfig_path: "/home/victory/.kube/config"
+        kubectl_bin: "/usr/local/bin/kubectl"
+        namespace: "longhorn-system"
+      tasks:
+        - name: ❌ Borrar todos los recursos (deployments, statefulsets, etc.)
+          shell: |
+            export KUBECONFIG={{ kubeconfig_path }}
+            {{ kubectl_bin }} delete all --all -n {{ namespace }} --ignore-not-found --grace-period=0 --force
+          changed_when: true
+          ignore_errors: true
 
-  tasks:
-    - name: 🧹 Desinstalar release de Helm si existe
-      shell: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        {{ helm_bin }} uninstall {{ release_name }} -n {{ namespace }} || true
-      changed_when: true
-      ignore_errors: true # Permitir que falle si el release no existe
+        - name: ❌ Borrar PVCs
+          shell: |
+            export KUBECONFIG={{ kubeconfig_path }}
+            {{ kubectl_bin }} delete pvc --all -n {{ namespace }} --ignore-not-found --grace-period=0 --force
+          changed_when: true
+          ignore_errors: true
 
-- name: 🧼 3 - Borrar todos los recursos del namespace Longhorn
-  hosts: controller
-  become: true
-  gather_facts: false
-  when: longhorn_ns_check.rc == 0
-
-  vars:
-    kubeconfig_path: "/home/victory/.kube/config"
-    kubectl_bin: "/usr/local/bin/kubectl"
-    namespace: "longhorn-system"
-
-  tasks:
-    - name: ❌ Borrar todos los recursos (deployments, statefulsets, etc.)
-      shell: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        {{ kubectl_bin }} delete all --all -n {{ namespace }} --ignore-not-found --grace-period=0 --force
-      changed_when: true
-      ignore_errors: true
-
-    - name: ❌ Borrar PVCs
-      shell: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        {{ kubectl_bin }} delete pvc --all -n {{ namespace }} --ignore-not-found --grace-period=0 --force
-      changed_when: true
-      ignore_errors: true
-
-    - name: ❌ Borrar Services
-      shell: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        {{ kubectl_bin }} delete svc --all -n {{ namespace }} --ignore-not-found --grace-period=0 --force
-      changed_when: true
-      ignore_errors: true
+        - name: ❌ Borrar Services
+          shell: |
+            export KUBECONFIG={{ kubeconfig_path }}
+            {{ kubectl_bin }} delete svc --all -n {{ namespace }} --ignore-not-found --grace-period=0 --force
+          changed_when: true
+          ignore_errors: true
 
 - name: 💣 4 - Eliminar CRDs Longhorn forzadamente
   hosts: controller
