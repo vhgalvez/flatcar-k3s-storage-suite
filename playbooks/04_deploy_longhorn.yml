@@ -13,7 +13,6 @@
     longhorn_release: "longhorn"
 
   pre_tasks:
-
     - name: 🔍 Comprobar si el namespace de Longhorn existe
       command: >
         {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get namespace {{ longhorn_namespace }}
@@ -54,7 +53,6 @@
       ignore_errors: true
 
   tasks:
-
     - name: 📥 Añadir repositorio Helm de Longhorn (si no existe)
       command: >
         {{ helm_bin }} repo add longhorn https://charts.longhorn.io
