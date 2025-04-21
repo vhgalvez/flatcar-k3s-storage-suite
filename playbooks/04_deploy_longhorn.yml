@@ -53,7 +53,7 @@
       changed_when: false
       ignore_errors: true
 
-    tasks:
+  tasks:
 
     - name: 📥 Añadir repositorio Helm de Longhorn (si no existe)
       command: >
