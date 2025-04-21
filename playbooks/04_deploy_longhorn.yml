@@ -10,6 +10,7 @@
     kubectl_bin: "/usr/local/bin/kubectl"
     helm_bin: "/usr/local/bin/helm"
     longhorn_namespace: "longhorn-system"
+    longhorn_release: "longhorn"
 
   pre_tasks:
 
@@ -33,7 +34,7 @@
         msg: |
           ⚠️ El namespace '{{ longhorn_namespace }}' contiene recursos de una instalación anterior.
           🧹 Para limpiar y reinstalar ejecuta:
-          ansible-playbook playbooks/cleanup_longhorn.yml -i inventory/hosts.ini -e "confirm_cleanup=yes"
+            ansible-playbook playbooks/cleanup_longhorn.yml -i inventory/hosts.ini -e "confirm_cleanup=yes"
           Recursos detectados:
           {{ longhorn_check.stdout | default('') }}
       when:
@@ -41,6 +42,16 @@
         - longhorn_check.stdout is defined
         - longhorn_check.stdout | trim != ''
         - "'No resources found' not in longhorn_check.stdout"
+
+    - name: 🧹 Eliminar release roto si es necesario
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        if {{ helm_bin }} status {{ longhorn_release }} -n {{ longhorn_namespace }} 2>&1 | grep -q 'has no deployed releases'; then
+          echo "⚠️ Eliminando release roto '{{ longhorn_release }}'..."
+          {{ helm_bin }} uninstall {{ longhorn_release }} -n {{ longhorn_namespace }} || true
+        fi
+      changed_when: false
+      ignore_errors: true
 
   tasks:
 
@@ -57,14 +68,17 @@
 
     - name: 🚀 Instalar Longhorn con Helm
       command: >
-        {{ helm_bin }} upgrade --install longhorn longhorn/longhorn
+        {{ helm_bin }} upgrade --install {{ longhorn_release }} longhorn/longhorn
         --namespace {{ longhorn_namespace }}
         --create-namespace
+        --cleanup-on-fail
         --wait
         --timeout 10m0s
         --kubeconfig {{ kubeconfig_path }}
       register: longhorn_install
-      failed_when: longhorn_install.rc != 0
+      failed_when:
+        - longhorn_install.rc != 0
+        - "'has no deployed releases' not in longhorn_install.stderr"
 
     - name: ⏳ Esperar a que los pods estén listos (máx 5 minutos)
       command: >
