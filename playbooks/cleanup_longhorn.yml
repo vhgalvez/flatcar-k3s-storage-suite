@@ -30,7 +30,7 @@
         export KUBECONFIG={{ kubeconfig_path }}
         {{ helm_bin }} uninstall {{ release_name }} -n {{ namespace }} || true
       changed_when: true
-      ignore_errors: true # Permitir que falle si el release no existe
+      ignore_errors: true
 
     - name: 🧼 3 - Borrar todos los recursos del namespace Longhorn
       when: longhorn_ns_check.rc == 0
