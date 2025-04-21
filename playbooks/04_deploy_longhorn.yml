@@ -1,5 +1,6 @@
 # playbooks\04_deploy_longhorn.yml
 ---
+---
 - name: 🚀 4 - Instalar Longhorn desde el nodo controller
   hosts: controller
   become: true
@@ -26,7 +27,7 @@
       register: longhorn_check
       failed_when: false
       changed_when: false
-      when: "'NotFound' not in longhorn_ns_check.stdout"
+      when: longhorn_ns_check.rc == 0
 
     - name: ❌ Abortamos si el namespace '{{ longhorn_namespace }}' tiene recursos
       fail:
@@ -37,7 +38,7 @@
           Recursos detectados:
           {{ longhorn_check.stdout | default('') }}
       when:
-        - "'NotFound' not in longhorn_ns_check.stdout"
+        - longhorn_ns_check.rc == 0
         - longhorn_check.stdout is defined
         - longhorn_check.stdout | trim != ''
         - "'No resources found' not in longhorn_check.stdout"
@@ -76,15 +77,23 @@
       register: longhorn_install
       failed_when:
         - longhorn_install.rc != 0
-        - "'has no deployed releases' not in longhorn_install.stderr"
 
-    - name: ⏳ Esperar a que al menos un pod exista (máx 120s)
+    - name: 🔍 Verificar si el release tiene recursos tras instalación
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        {{ helm_bin }} get all {{ longhorn_release }} -n {{ longhorn_namespace }} || exit 1
+      register: helm_get_result
+      failed_when: helm_get_result.rc != 0 or 'MANIFEST' not in helm_get_result.stdout
+      changed_when: false
+
+    - name: ⏳ Esperar a que Longhorn cree al menos un pod (máx 120s)
       shell: |
         for i in {1..24}; do
-          count=$({{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get pods -n {{ longhorn_namespace }} --no-headers 2>/dev/null | wc -l)
-          if [ "$count" -gt 0 ]; then exit 0; fi
+          {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get pods -n {{ longhorn_namespace }} --no-headers 2>/dev/null | grep -qv '^$' && exit 0
           sleep 5
         done
+        echo "❌ No se detectaron pods en '{{ longhorn_namespace }}'"
+        {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get events -n {{ longhorn_namespace }} || true
         exit 1
       register: pod_exist_check
       failed_when: pod_exist_check.rc != 0
@@ -121,3 +130,14 @@
       changed_when: "'deleted' in delete_helm_pods.stdout or delete_helm_pods.stderr"
       failed_when: false
       when: longhorn_install is defined and longhorn_install.rc == 0
+
+    - name: 📜 Obtener eventos del namespace para diagnóstico
+      shell: >
+        {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get events -n {{ longhorn_namespace }} --sort-by='.metadata.creationTimestamp'
+      register: longhorn_events
+      changed_when: false
+      failed_when: false
+
+    - name: 🐞 Mostrar eventos de Longhorn (Debug)
+      debug:
+        var: longhorn_events.stdout
