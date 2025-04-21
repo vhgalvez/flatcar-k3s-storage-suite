@@ -27,17 +27,20 @@
       failed_when: false
       changed_when: false
       when: "'NotFound' not in longhorn_ns_check.stdout"
-
+  
     - name: ❌ Abortamos si el namespace '{{ longhorn_namespace }}' tiene recursos
       fail:
         msg: |
           ⚠️ El namespace '{{ longhorn_namespace }}' contiene recursos de una instalación anterior.
           🧹 Ejecuta: ansible-playbook playbooks/cleanup_longhorn.yml -e "confirm_cleanup=yes"
           Recursos detectados:
-          {{ longhorn_check.stdout }}
+          {{ longhorn_check.stdout | default('') }}
       when:
         - "'NotFound' not in longhorn_ns_check.stdout"
+        - longhorn_check.stdout is defined
+        - longhorn_check.stdout | trim != ''
         - "'No resources found' not in longhorn_check.stdout"
+
 
   tasks:
 
