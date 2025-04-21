@@ -14,13 +14,9 @@
     - name: 🧹 Desinstalar release de Helm si existe
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        if {{ helm_bin }} list -A | grep -q "^{{ release_name }}"; then
-          echo "🧹 Eliminando release '{{ release_name }}' de Helm..."
-          {{ helm_bin }} uninstall {{ release_name }} -n {{ namespace }} || true
-        else
-          echo "✅ Release {{ release_name }} no está instalado."
-        fi
-      changed_when: false
+        echo "🧹 Eliminando cualquier release de '{{ release_name }}' de Helm..."
+        {{ helm_bin }} uninstall {{ release_name }} -n {{ namespace }} || true
+      changed_when: true  # Siempre consideramos que hubo un cambio porque eliminamos la release
 
 - name: 🧼 2 - Borrar recursos del namespace Longhorn + eliminar CRDs
   hosts: controller
@@ -38,13 +34,14 @@
         name: jq
         state: present
 
-    - name: ❌ Borrar recursos del namespace
+    - name: ❌ Borrar todos los recursos del namespace Longhorn
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
         {{ kubectl_bin }} delete all --all -n {{ namespace }} --ignore-not-found
         {{ kubectl_bin }} delete pvc --all -n {{ namespace }} --ignore-not-found
         {{ kubectl_bin }} delete pv --all --ignore-not-found
-      changed_when: false
+        echo "🧹 Recursos de Longhorn eliminados del namespace {{ namespace }}."
+      changed_when: true
 
     - name: 💣 Eliminar CRDs Longhorn forzadamente con patch (con progreso)
       shell: |
