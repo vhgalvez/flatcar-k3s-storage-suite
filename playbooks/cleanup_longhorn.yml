@@ -1,4 +1,5 @@
-# playbooks\cleanup_longhorn.yml
+# playbooks/cleanup_longhorn.yml
+
 - name: 💣 Limpiar completamente /dev/vdb en storage y workers
   hosts: storage,workers
   gather_facts: false
@@ -110,18 +111,13 @@
         if {{ helm_bin }} list -A | grep -q "^{{ release_name }}"; then
           echo "🧹 Eliminando release '{{ release_name }}' de Helm..."
           {{ helm_bin }} uninstall {{ release_name }} -n {{ namespace }} || true
-          # 🧹 Si aún aparece en helm list, eliminar del historial
-          release_info=$({{ helm_bin }} list -A | grep "^{{ release_name }}" | awk '{print $1}')
-          if [ ! -z "$release_info" ]; then
-            echo "⚠️ Borrando release roto '{{ release_name }}' del historial Helm..."
-            rm -rf ~/.cache/helm/repository
-            rm -rf ~/.config/helm
-            rm -rf ~/.local/share/helm
-            # También puedes usar helm uninstall con flags adicionales si fuera necesario
-          fi
-        else
-          echo "✅ No hay release '{{ release_name }}' registrado."
         fi
+      changed_when: false
+
+    - name: 🧹 Eliminar namespace si sigue activo
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        {{ kubectl_bin }} delete namespace {{ namespace }} --ignore-not-found
       changed_when: false
 
     - name: ✅ Verificar que todo fue eliminado
