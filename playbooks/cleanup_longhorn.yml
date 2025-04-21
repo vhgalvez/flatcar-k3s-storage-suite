@@ -1,60 +1,4 @@
 # playbooks\cleanup_longhorn.yml
----
-- name: 💣 Limpiar completamente /dev/vdb en storage y workers
-  hosts: storage,workers
-  gather_facts: false
-  become: true
-
-  tasks:
-    - name: 🔍 Mostrar si hay montajes activos en /dev/vdb
-      raw: mount | grep vdb || true
-      changed_when: false
-
-    - name: 💣 Desmontar volúmenes y esperar
-      raw: |
-        umount -f /mnt/longhorn-disk 2>/dev/null || true
-        umount -f /srv/nfs/postgresql 2>/dev/null || true
-        umount -f /srv/nfs/shared 2>/dev/null || true
-        sleep 2
-      ignore_errors: true
-
-    - name: ⏳ Esperar a que /dev/vdb ya no esté montado
-      raw: |
-        for i in $(seq 1 5); do
-          mount | grep -q vdb || exit 0
-          sleep 1
-        done
-        exit 1
-      register: umount_check
-      failed_when: umount_check.rc != 0
-      changed_when: false
-
-    - name: ❌ Detener servicios que puedan bloquear el disco (solo en storage)
-      raw: |
-        systemctl stop nfs-server || true
-        systemctl stop iscsid || true
-      when: "'storage' in group_names"
-
-    - name: 🧹 Eliminar volúmenes LVM (si existen)
-      raw: |
-        lvremove -f /dev/vg_storage/postgres_lv 2>/dev/null || true
-        lvremove -f /dev/vg_storage/shared_lv 2>/dev/null || true
-        lvremove -f /dev/vg_storage/longhorn_lv 2>/dev/null || true
-        sleep 1
-
-    - name: 🧱 Eliminar grupo de volúmenes
-      raw: vgremove -f vg_storage 2>/dev/null || true
-
-    - name: 💽 Eliminar volumen físico
-      raw: pvremove -f /dev/vdb1 2>/dev/null || true
-
-    - name: ❎ Eliminar partición y limpiar firmas
-      raw: |
-        parted -s /dev/vdb rm 1 2>/dev/null || true
-        wipefs -a /dev/vdb 2>/dev/null || true
-
-    - name: 🧼 Esperar a que el sistema asiente los cambios
-      raw: udevadm settle
 - name: 🧹 Limpiar namespace, CRDs y finalizadores de Longhorn
   hosts: controller
   become: true
@@ -67,13 +11,6 @@
     helm_bin: "/usr/local/bin/helm"
 
   tasks:
-    - name: 🧹 Desinstalar Longhorn con Helm (si existe release)
-      shell: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        if {{ helm_bin }} list -n {{ longhorn_namespace }} | grep -q longhorn; then
-          {{ helm_bin }} uninstall longhorn -n {{ longhorn_namespace }} || true
-        fi
-      changed_when: false
 
     - name: ❌ Borrar recursos del namespace
       shell: |
@@ -96,6 +33,14 @@
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
         {{ kubectl_bin }} get crds | grep longhorn.io | awk '{print $1}' | xargs -r {{ kubectl_bin }} delete crd || true
+      changed_when: false
+
+    - name: 🧹 Desinstalar Longhorn con Helm (si existe release)
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        if {{ helm_bin }} list -n {{ longhorn_namespace }} | grep -q longhorn; then
+          {{ helm_bin }} uninstall longhorn -n {{ longhorn_namespace }} || true
+        fi
       changed_when: false
 
     - name: ✅ Verificar que todo fue eliminado
