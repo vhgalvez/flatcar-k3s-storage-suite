@@ -56,54 +56,55 @@
     - name: 🧼 Esperar a que el sistema asiente los cambios
       raw: udevadm settle
 
-- name: 🧹 Limpiar namespace, CRDs y finalizadores de Longhorn
+- name: 🧹 Limpiar namespace, CRDs y finalizadores
   hosts: controller
   become: true
   gather_facts: false
 
   vars:
     kubeconfig_path: "/home/victory/.kube/config"
-    longhorn_namespace: "longhorn-system"
     kubectl_bin: "/usr/local/bin/kubectl"
     helm_bin: "/usr/local/bin/helm"
+    namespace: "longhorn-system"
+    release_name: "longhorn"
 
   tasks:
     - name: 🧪 Instalar jq si no está presente
-      ansible.builtin.package:
+      package:
         name: jq
         state: present
 
     - name: ❌ Borrar recursos del namespace
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        {{ kubectl_bin }} delete all --all -n {{ longhorn_namespace }} --ignore-not-found
-        {{ kubectl_bin }} delete pvc --all -n {{ longhorn_namespace }} --ignore-not-found
+        {{ kubectl_bin }} delete all --all -n {{ namespace }} --ignore-not-found
+        {{ kubectl_bin }} delete pvc --all -n {{ namespace }} --ignore-not-found
         {{ kubectl_bin }} delete pv --all --ignore-not-found
-        {{ kubectl_bin }} delete deployment,daemonset,pod -n {{ longhorn_namespace }} --all --ignore-not-found
+        {{ kubectl_bin }} delete deployment,daemonset,pod -n {{ namespace }} --all --ignore-not-found
       changed_when: false
 
     - name: 🧨 Forzar eliminación con jq si el namespace está en Terminating
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        ns_status=$({{ kubectl_bin }} get ns {{ longhorn_namespace }} -o json | jq -r .status.phase)
+        ns_status=$({{ kubectl_bin }} get ns {{ namespace }} -o json | jq -r .status.phase)
         if [ "$ns_status" == "Terminating" ]; then
-          {{ kubectl_bin }} get namespace {{ longhorn_namespace }} -o json | jq 'del(.spec.finalizers)' > /tmp/tmp-ns.json
-          {{ kubectl_bin }} replace --raw "/api/v1/namespaces/{{ longhorn_namespace }}/finalize" -f /tmp/tmp-ns.json || true
+          {{ kubectl_bin }} get namespace {{ namespace }} -o json | jq 'del(.spec.finalizers)' > /tmp/tmp-ns.json
+          {{ kubectl_bin }} replace --raw "/api/v1/namespaces/{{ namespace }}/finalize" -f /tmp/tmp-ns.json || true
           rm -f /tmp/tmp-ns.json
         fi
       changed_when: false
 
-    - name: 💣 Eliminar CRDs de Longhorn
+    - name: 💣 Eliminar CRDs relacionadas con Longhorn
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
         {{ kubectl_bin }} get crds | grep longhorn.io | awk '{print $1}' | xargs -r {{ kubectl_bin }} delete crd || true
       changed_when: false
 
-    - name: 🧹 Desinstalar Longhorn con Helm (si existe release)
+    - name: 🧹 Desinstalar Helm release (si existe)
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        if {{ helm_bin }} list -n {{ longhorn_namespace }} | grep -q longhorn; then
-          {{ helm_bin }} uninstall longhorn -n {{ longhorn_namespace }} || true
+        if {{ helm_bin }} list -n {{ namespace }} | grep -q {{ release_name }}; then
+          {{ helm_bin }} uninstall {{ release_name }} -n {{ namespace }} || true
         fi
       changed_when: false
 
