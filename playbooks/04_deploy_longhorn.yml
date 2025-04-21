@@ -53,7 +53,7 @@
       changed_when: false
       ignore_errors: true
 
-  tasks:
+    tasks:
 
     - name: 📥 Añadir repositorio Helm de Longhorn (si no existe)
       command: >
@@ -80,14 +80,27 @@
         - longhorn_install.rc != 0
         - "'has no deployed releases' not in longhorn_install.stderr"
 
+    - name: ⏳ Esperar a que al menos un pod exista (máx 120s)
+      shell: |
+        for i in {1..24}; do
+          count=$({{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get pods -n {{ longhorn_namespace }} --no-headers 2>/dev/null | wc -l)
+          if [ "$count" -gt 0 ]; then exit 0; fi
+          sleep 5
+        done
+        exit 1
+      register: pod_exist_check
+      failed_when: pod_exist_check.rc != 0
+      changed_when: false
+
     - name: ⏳ Esperar a que los pods estén listos (máx 5 minutos)
-      command: >
+      shell: >
         {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} wait --for=condition=Ready pod -n {{ longhorn_namespace }} --all --timeout=300s
       register: pod_ready
       failed_when: pod_ready.rc != 0
 
     - name: 📊 Mostrar estado de pods, PVCs y PVs
       shell: |
+        echo "📦 Pods:"
         {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get pods -n {{ longhorn_namespace }}
         echo ""
         echo "📁 PVCs:"

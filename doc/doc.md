@@ -38,3 +38,25 @@ sudo parted /dev/vdb rm 1
 
 
 sudo dnf install -y jq
+
+
+
+✅ 5. (Opcional) Abre la UI de Longhorn en tu navegador
+Si usas Traefik o Ingress, verifica si hay un Ingress creado:
+
+bash
+Copiar
+Editar
+kubectl get ingress -n longhorn-system
+Si no tienes Ingress, puedes hacer port-forward:
+
+bash
+Copiar
+Editar
+kubectl port-forward -n longhorn-system service/longhorn-frontend 8080:80
+Y luego abre tu navegador en:
+
+arduino
+Copiar
+Editar
+http://localhost:8080
