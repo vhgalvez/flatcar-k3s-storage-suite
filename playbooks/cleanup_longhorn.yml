@@ -56,24 +56,27 @@
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
         echo "🧹 Iniciando eliminación de CRDs de Longhorn..."
+        max_retries=3
         for crd in $(kubectl get crd -o name --kubeconfig {{ kubeconfig_path }} | grep 'longhorn.io'); do
           name=$(basename "$crd")
-          echo ""
           echo "🔧 Procesando CRD: $name"
-          kubectl get crd "$name" --kubeconfig {{ kubeconfig_path }} || echo "⚠️ CRD $name ya no existe"
-          echo "🔄 Quitando finalizers..."
-          kubectl patch crd "$name" -p '{"metadata":{"finalizers":[]}}' --type=merge --kubeconfig {{ kubeconfig_path }} || echo "⚠️ Error al quitar finalizers de $name"
-          sleep 1
-          echo "❌ Eliminando CRD $name..."
-          kubectl delete crd "$name" --grace-period=0 --force --kubeconfig {{ kubeconfig_path }} || echo "⚠️ Error al eliminar $name"
-          echo "✅ $name eliminado."
-          sleep 1
+          for i in $(seq 1 $max_retries); do
+            # Quitar finalizers
+            {{ kubectl_bin }} patch crd "$name" -p '{"metadata":{"finalizers":[]}}' --type=merge --kubeconfig {{ kubeconfig_path }} && break || sleep 5
+          done
+          # Eliminar CRD
+          {{ kubectl_bin }} delete crd "$name" --grace-period=0 --force --kubeconfig {{ kubeconfig_path }} || true
+          echo "✅ $name procesado."
         done
-        echo ""
-        echo "✅ Todos los CRDs de Longhorn fueron procesados."
+        # Verificación final
+        remaining_crds=$({{ kubectl_bin }} get crd --kubeconfig {{ kubeconfig_path }} | grep 'longhorn.io' || echo "✅ No hay CRDs restantes")
+        if [[ "$remaining_crds" != "✅ No hay CRDs restantes" ]]; then
+          echo "❌ CRDs restantes: $remaining_crds"
+          exit 1
+        fi
       register: crd_cleanup
-      changed_when: "'eliminado' in crd_cleanup.stdout or 'deleted' in crd_cleanup.stdout"
-      failed_when: false
+      failed_when: "'❌ CRDs restantes' in crd_cleanup.stdout"
+      changed_when: true
 
     - name: 🔍 Verificar si los CRDs de Longhorn fueron eliminados
       shell: |
