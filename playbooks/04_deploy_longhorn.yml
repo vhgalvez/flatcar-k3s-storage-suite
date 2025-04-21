@@ -13,12 +13,12 @@
     longhorn_release: "longhorn"
 
   pre_tasks:
-    - name: 🔍 Comprobar si el namespace de Longhorn existe
+    - name: 🔧 Crear namespace Longhorn si no existe
       command: >
-        {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get namespace {{ longhorn_namespace }}
-      register: longhorn_ns_check
-      failed_when: false
-      changed_when: false
+        {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} create namespace {{ longhorn_namespace }}
+      register: ns_create
+      failed_when: ns_create.rc != 0 and 'AlreadyExists' not in ns_create.stderr
+      changed_when: "'created' in ns_create.stdout"
 
     - name: ⚠️ Verificar si el namespace tiene recursos
       command: >
@@ -26,7 +26,6 @@
       register: longhorn_check
       failed_when: false
       changed_when: false
-      when: longhorn_ns_check.rc == 0
 
     - name: ❌ Abortamos si el namespace '{{ longhorn_namespace }}' tiene recursos
       fail:
@@ -37,7 +36,6 @@
           Recursos detectados:
           {{ longhorn_check.stdout | default('') }}
       when:
-        - longhorn_ns_check.rc == 0
         - longhorn_check.stdout is defined
         - longhorn_check.stdout | trim != ''
         - "'No resources found' not in longhorn_check.stdout"
@@ -58,14 +56,12 @@
       command: >
         {{ helm_bin }} upgrade --install {{ longhorn_release }} longhorn/longhorn
         --namespace {{ longhorn_namespace }}
-        --create-namespace
         --cleanup-on-fail
         --wait
         --timeout 10m0s
         --kubeconfig {{ kubeconfig_path }}
       register: longhorn_install
-      failed_when:
-        - longhorn_install.rc != 0
+      failed_when: longhorn_install.rc != 0
 
     - name: 🔍 Verificar si el release tiene recursos tras instalación
       shell: |
@@ -109,24 +105,3 @@
     - name: ✅ Resultado del despliegue
       debug:
         var: volumes_info.stdout_lines
-
-    - name: 🧹 Eliminar pods helm-install-traefik* completados (si Helm terminó bien)
-      shell: |
-        {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get pods -n kube-system -o json |
-        jq -r '.items[] | select(.status.phase=="Succeeded" or .status.phase=="Completed") | select(.metadata.name | test("^helm-install-traefik")) | .metadata.name' |
-        xargs -r -n1 {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} delete pod -n kube-system
-      register: delete_helm_pods
-      changed_when: "'deleted' in delete_helm_pods.stdout or delete_helm_pods.stderr"
-      failed_when: false
-      when: longhorn_install is defined and longhorn_install.rc == 0
-
-    - name: 📜 Obtener eventos del namespace para diagnóstico
-      shell: >
-        {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get events -n {{ longhorn_namespace }} --sort-by='.metadata.creationTimestamp'
-      register: longhorn_events
-      changed_when: false
-      failed_when: false
-
-    - name: 🐞 Mostrar eventos de Longhorn (Debug)
-      debug:
-        var: longhorn_events.stdout
