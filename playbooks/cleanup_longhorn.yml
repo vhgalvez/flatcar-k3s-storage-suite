@@ -14,12 +14,11 @@
     - name: 🧹 Desinstalar release de Helm si existe
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        echo "🧹 Eliminando cualquier release de '{{ release_name }}' de Helm..."
         {{ helm_bin }} uninstall {{ release_name }} -n {{ namespace }} || true
       changed_when: true
 
 
-- name: 🧼 2 - Borrar recursos del namespace Longhorn + eliminar CRDs
+- name: 🧼 2 - Borrar recursos del namespace Longhorn + eliminar CRDs y namespace
   hosts: controller
   become: true
   gather_facts: false
@@ -41,43 +40,53 @@
         {{ kubectl_bin }} delete all --all -n {{ namespace }} --ignore-not-found
         {{ kubectl_bin }} delete pvc --all -n {{ namespace }} --ignore-not-found
         {{ kubectl_bin }} delete pv --all --ignore-not-found
-        echo "🧹 Recursos eliminados de {{ namespace }}."
       changed_when: true
 
-    - name: 💣 Eliminar CRDs Longhorn forzadamente con patch (con progreso)
+    - name: 💣 Eliminar CRDs Longhorn forzadamente con patch
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        echo "🧹 Iniciando eliminación de CRDs de Longhorn..."
         for crd in $({{ kubectl_bin }} get crd -o name | grep 'longhorn.io'); do
           name=$(basename "$crd")
-          echo "🔧 Procesando CRD: $name"
-          {{ kubectl_bin }} get crd "$name" || echo "⚠️ CRD $name ya no existe"
-          echo "🔄 Quitando finalizers..."
-          timeout 30 {{ kubectl_bin }} patch crd "$name" -p '{"metadata":{"finalizers":[]}}' --type=merge || echo "⚠️ Error al quitar finalizers de $name"
-          echo "❌ Eliminando CRD $name..."
-          timeout 30 {{ kubectl_bin }} delete crd "$name" --grace-period=0 --force || echo "⚠️ Error al eliminar $name"
+          {{ kubectl_bin }} patch crd "$name" -p '{"metadata":{"finalizers":[]}}' --type=merge || true
+          {{ kubectl_bin }} delete crd "$name" --grace-period=0 --force || true
         done
-        echo "✅ Todos los CRDs de Longhorn fueron procesados."
       register: crd_cleanup
-      changed_when: "'eliminado' in crd_cleanup.stdout or 'deleted' in crd_cleanup.stdout"
+      changed_when: true
       failed_when: false
 
-    - name: 🧨 Forzar eliminación del namespace si tiene finalizers
+    - name: 🧨 Verificar y eliminar finalizers del namespace si existen
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        if {{ kubectl_bin }} get ns {{ namespace }} -o json | jq -e '.spec.finalizers | length > 0' > /dev/null; then
-          echo "⚠️ Eliminando finalizers del namespace {{ namespace }}..."
-          {{ kubectl_bin }} get ns {{ namespace }} -o json | jq 'del(.spec.finalizers)' > /tmp/tmp-ns.json
-          {{ kubectl_bin }} replace --raw "/api/v1/namespaces/{{ namespace }}/finalize" -f /tmp/tmp-ns.json || true
-          rm -f /tmp/tmp-ns.json
+        if {{ kubectl_bin }} get namespace {{ namespace }} -o json | jq -e '.spec.finalizers | length > 0' > /dev/null; then
+          {{ kubectl_bin }} get namespace {{ namespace }} -o json | jq 'del(.spec.finalizers)' > /tmp/ns-clean.json
+          {{ kubectl_bin }} replace --raw "/api/v1/namespaces/{{ namespace }}/finalize" -f /tmp/ns-clean.json || true
+          rm -f /tmp/ns-clean.json
         fi
       changed_when: true
       failed_when: false
 
-    - name: ❌ Eliminar el namespace completamente
+    - name: ❌ Eliminar el namespace completamente (con espera activa)
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
         {{ kubectl_bin }} delete namespace {{ namespace }} --ignore-not-found
+        for i in $(seq 1 24); do
+          sleep 5
+          {{ kubectl_bin }} get namespace {{ namespace }} &>/dev/null || exit 0
+        done
+        echo "⚠️ Namespace sigue existiendo tras esperar 120s."
+        exit 1
+      register: ns_delete_result
+      failed_when: ns_delete_result.rc != 0
+      changed_when: true
+
+    - name: 🚨 Forzar eliminación final si aún existe
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        if {{ kubectl_bin }} get namespace {{ namespace }} &>/dev/null; then
+          {{ kubectl_bin }} get namespace {{ namespace }} -o json | jq 'del(.spec.finalizers)' > /tmp/ns-force.json
+          {{ kubectl_bin }} replace --raw "/api/v1/namespaces/{{ namespace }}/finalize" -f /tmp/ns-force.json || true
+          rm -f /tmp/ns-force.json
+        fi
       changed_when: true
       failed_when: false
 
@@ -88,15 +97,15 @@
 
 - name: 💽 3 - Limpiar completamente /dev/vdb en storage y workers
   hosts: storage,workers
-  gather_facts: false
   become: true
+  gather_facts: false
 
   tasks:
     - name: 🔍 Mostrar si hay montajes activos en /dev/vdb
       raw: mount | grep vdb || true
       changed_when: false
 
-    - name: 💣 Desmontar volúmenes y esperar
+    - name: 💣 Desmontar volúmenes
       raw: |
         umount -f /mnt/longhorn-disk 2>/dev/null || true
         umount -f /srv/nfs/postgresql 2>/dev/null || true
