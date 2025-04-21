@@ -42,16 +42,6 @@
         - longhorn_check.stdout | trim != ''
         - "'No resources found' not in longhorn_check.stdout"
 
-    - name: 🧹 Eliminar release roto si es necesario
-      shell: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        if {{ helm_bin }} status {{ longhorn_release }} -n {{ longhorn_namespace }} 2>&1 | grep -q 'has no deployed releases'; then
-          echo "⚠️ Eliminando release roto '{{ longhorn_release }}'..."
-          {{ helm_bin }} uninstall {{ longhorn_release }} -n {{ longhorn_namespace }} || true
-        fi
-      changed_when: false
-      ignore_errors: true
-
   tasks:
     - name: 📥 Añadir repositorio Helm de Longhorn (si no existe)
       command: >
