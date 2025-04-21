@@ -97,33 +97,25 @@
     - name: 💣 Eliminar CRDs Longhorn forzadamente con patch (con progreso)
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        total=$({{ kubectl_bin }} get crd -o name | grep longhorn.io | wc -l)
-        index=1
-        for crd in $({{ kubectl_bin }} get crd -o name | grep longhorn.io); do
-          name=$(basename $crd)
-          echo "🔧 [$index/$total] Eliminando $name..."
-          {{ kubectl_bin }} patch crd $name -p '{"metadata":{"finalizers":[]}}' --type=merge || echo "⚠️ Fallo al hacer patch de $name"
-          {{ kubectl_bin }} delete crd $name --grace-period=0 --force || echo "⚠️ Fallo al eliminar $name"
-          index=$((index + 1))
+        echo "🧹 Iniciando eliminación de CRDs de Longhorn..."
+        for crd in $(kubectl get crd -o name | grep 'longhorn.io'); do
+          name=$(basename "$crd")
+          echo ""
+          echo "🔧 Procesando CRD: $name"
+          kubectl get crd "$name" || echo "⚠️ CRD $name ya no existe"
+          echo "🔄 Quitando finalizers..."
+          kubectl patch crd "$name" -p '{"metadata":{"finalizers":[]}}' --type=merge || echo "⚠️ Error al quitar finalizers de $name"
+          sleep 1
+          echo "❌ Eliminando CRD $name..."
+          kubectl delete crd "$name" --grace-period=0 --force || echo "⚠️ Error al eliminar $name"
+          echo "✅ $name eliminado."
+          sleep 1
         done
-      register: crd_delete_output
-      changed_when: "'Eliminando' in crd_delete_output.stdout"
+        echo ""
+        echo "✅ Todos los CRDs de Longhorn fueron procesados."
+      register: crd_cleanup
+      changed_when: "'eliminado' in crd_cleanup.stdout or 'deleted' in crd_cleanup.stdout"
       failed_when: false
-
-
-    - name: 🧹 Eliminar namespace si sigue activo
-      shell: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        {{ kubectl_bin }} delete namespace {{ namespace }} --ignore-not-found
-      changed_when: false
-
-    - name: ✅ Verificar que todo fue eliminado
-      shell: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        echo "Pods activos:"
-        {{ kubectl_bin }} get pods -A | grep longhorn || echo "✅ Ningún pod de Longhorn activo"
-      register: check_result
-      changed_when: false
 
     - name: 🧾 Mostrar resumen
       debug:
