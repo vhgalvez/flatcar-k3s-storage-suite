@@ -35,3 +35,6 @@ sudo vgremove -y vg_storage
 sudo pvremove -y /dev/vdb1
 
 sudo parted /dev/vdb rm 1
+
+
+sudo dnf install -y jq
