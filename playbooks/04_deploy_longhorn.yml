@@ -1,6 +1,5 @@
 # playbooks\04_deploy_longhorn.yml
 ---
----
 - name: 🚀 4 - Instalar Longhorn desde el nodo controller
   hosts: controller
   become: true
