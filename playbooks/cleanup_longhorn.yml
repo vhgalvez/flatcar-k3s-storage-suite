@@ -93,7 +93,6 @@
   hosts: controller
   become: true
   gather_facts: false
-  when: longhorn_ns_check.rc == 0
 
   vars:
     kubeconfig_path: "/home/victory/.kube/config"
