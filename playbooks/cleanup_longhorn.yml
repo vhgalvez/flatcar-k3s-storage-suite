@@ -47,13 +47,33 @@
     - name: 💣 Eliminar CRDs Longhorn forzadamente con patch
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        for crd in $({{ kubectl_bin }} get crd -o name | grep 'longhorn.io'); do
+        echo "🧹 Iniciando eliminación de CRDs de Longhorn..."
+        for crd in $(kubectl get crd -o name | grep 'longhorn.io'); do
           name=$(basename "$crd")
-          {{ kubectl_bin }} patch crd "$name" -p '{"metadata":{"finalizers":[]}}' --type=merge || true
-          {{ kubectl_bin }} delete crd "$name" --grace-period=0 --force || true
+          echo ""
+          echo "🔧 Procesando CRD: $name"
+          kubectl get crd "$name" || echo "⚠️ CRD $name ya no existe"
+          echo "🔄 Quitando finalizers..."
+          kubectl patch crd "$name" -p '{"metadata":{"finalizers":[]}}' --type=merge || echo "⚠️ Error al quitar finalizers de $name"
+          sleep 1
+          echo "❌ Eliminando CRD $name..."
+          kubectl delete crd "$name" --grace-period=0 --force || echo "⚠️ Error al eliminar $name"
+          echo "✅ $name eliminado."
+          sleep 1
         done
+        echo ""
+        echo "✅ Todos los CRDs de Longhorn fueron procesados."
+
+        # Validación final para verificar si aún existen CRDs de Longhorn
+        remaining_crds=$(kubectl get crd | grep 'longhorn.io' || echo "No CRDs restantes")
+        if [ "$remaining_crds" != "No CRDs restantes" ]; then
+          echo "⚠️ Algunos CRDs de Longhorn aún existen: $remaining_crds"
+          exit 1
+        else
+          echo "✅ Todos los CRDs de Longhorn han sido eliminados correctamente."
+        fi
       register: crd_cleanup
-      changed_when: true
+      changed_when: "'eliminado' in crd_cleanup.stdout or 'deleted' in crd_cleanup.stdout"
       failed_when: false
 
     - name: 🔍 Verificar si los CRDs de Longhorn fueron eliminados
