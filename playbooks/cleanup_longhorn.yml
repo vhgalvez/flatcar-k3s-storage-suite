@@ -54,6 +54,7 @@
   tasks:
     - name: 🧹 Iniciando eliminación de CRDs de Longhorn...
       shell: |
+        export PATH=$PATH:/usr/local/bin
         export KUBECONFIG={{ kubeconfig_path }}
         echo "🧹 Iniciando eliminación de CRDs de Longhorn..."
         max_retries=3
@@ -155,6 +156,10 @@
         fi
       changed_when: true
       failed_when: false
+
+    - name: 🧾 Mostrar resumen de limpieza del namespace
+      debug:
+        var: ns_delete_result
 
     - name: 🧾 Mostrar resumen de limpieza del namespace
       debug:
