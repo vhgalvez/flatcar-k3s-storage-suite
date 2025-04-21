@@ -1,9 +1,34 @@
 # playbooks/cleanup_longhorn.yml
 ---
-- name: 💣 1 - Eliminar Helm release de Longhorn (si existe)
+- name: 🛑 1 - Preparación para la limpieza de Longhorn
   hosts: controller
   become: true
   gather_facts: false
+
+  vars:
+    kubeconfig_path: "/home/victory/.kube/config"
+    kubectl_bin: "/usr/local/bin/kubectl"
+    helm_bin: "/usr/local/bin/helm"
+    namespace: "longhorn-system"
+    release_name: "longhorn"
+
+  tasks:
+    - name: 🧪 Instalar jq si no está presente
+      package:
+        name: jq
+        state: present
+
+    - name: 🔍 Verificar si el namespace de Longhorn existe
+      shell: "{{ kubectl_bin }} get namespace {{ namespace }} --kubeconfig {{ kubeconfig_path }} --ignore-not-found"
+      register: longhorn_ns_check
+      failed_when: false
+      changed_when: false
+
+- name: 💣 2 - Eliminar Helm release de Longhorn (si existe)
+  hosts: controller
+  become: true
+  gather_facts: false
+  when: longhorn_ns_check.rc == 0
 
   vars:
     kubeconfig_path: "/home/victory/.kube/config"
@@ -17,11 +42,13 @@
         export KUBECONFIG={{ kubeconfig_path }}
         {{ helm_bin }} uninstall {{ release_name }} -n {{ namespace }} || true
       changed_when: true
+      ignore_errors: true # Permitir que falle si el release no existe
 
-- name: 🧼 2 - Borrar recursos del namespace Longhorn + eliminar CRDs y namespace
+- name: 🧼 3 - Borrar todos los recursos del namespace Longhorn
   hosts: controller
   become: true
   gather_facts: false
+  when: longhorn_ns_check.rc == 0
 
   vars:
     kubeconfig_path: "/home/victory/.kube/config"
@@ -29,49 +56,56 @@
     namespace: "longhorn-system"
 
   tasks:
-    - name: 🧪 Instalar jq si no está presente
-      package:
-        name: jq
-        state: present
-
-    - name: ❌ Borrar todos los recursos del namespace Longhorn
+    - name: ❌ Borrar todos los recursos (deployments, statefulsets, etc.)
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        {{ kubectl_bin }} delete all --all -n {{ namespace }} --ignore-not-found
-        {{ kubectl_bin }} delete pvc --all -n {{ namespace }} --ignore-not-found
-        {{ kubectl_bin }} delete pv --all --ignore-not-found
-        {{ kubectl_bin }} delete svc --all -n {{ namespace }} --ignore-not-found
-        {{ kubectl_bin }} delete deployment --all -n {{ namespace }} --ignore-not-found
+        {{ kubectl_bin }} delete all --all -n {{ namespace }} --ignore-not-found --grace-period=0 --force
       changed_when: true
+      ignore_errors: true
 
-    - name: 💣 Eliminar CRDs Longhorn forzadamente con patch
+    - name: ❌ Borrar PVCs
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        {{ kubectl_bin }} delete pvc --all -n {{ namespace }} --ignore-not-found --grace-period=0 --force
+      changed_when: true
+      ignore_errors: true
+
+    - name: ❌ Borrar Services
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        {{ kubectl_bin }} delete svc --all -n {{ namespace }} --ignore-not-found --grace-period=0 --force
+      changed_when: true
+      ignore_errors: true
+
+- name: 💣 4 - Eliminar CRDs Longhorn forzadamente
+  hosts: controller
+  become: true
+  gather_facts: false
+
+  vars:
+    kubeconfig_path: "/home/victory/.kube/config"
+    kubectl_bin: "/usr/local/bin/kubectl"
+
+  tasks:
+    - name: 🧹 Iniciando eliminación de CRDs de Longhorn...
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
         echo "🧹 Iniciando eliminación de CRDs de Longhorn..."
-        for crd in $(kubectl get crd -o name | grep 'longhorn.io'); do
+        for crd in $(kubectl get crd -o name --kubeconfig {{ kubeconfig_path }} | grep 'longhorn.io'); do
           name=$(basename "$crd")
           echo ""
           echo "🔧 Procesando CRD: $name"
-          kubectl get crd "$name" || echo "⚠️ CRD $name ya no existe"
+          kubectl get crd "$name" --kubeconfig {{ kubeconfig_path }} || echo "⚠️ CRD $name ya no existe"
           echo "🔄 Quitando finalizers..."
-          kubectl patch crd "$name" -p '{"metadata":{"finalizers":[]}}' --type=merge || echo "⚠️ Error al quitar finalizers de $name"
+          kubectl patch crd "$name" -p '{"metadata":{"finalizers":[]}}' --type=merge --kubeconfig {{ kubeconfig_path }} || echo "⚠️ Error al quitar finalizers de $name"
           sleep 1
           echo "❌ Eliminando CRD $name..."
-          kubectl delete crd "$name" --grace-period=0 --force || echo "⚠️ Error al eliminar $name"
+          kubectl delete crd "$name" --grace-period=0 --force --kubeconfig {{ kubeconfig_path }} || echo "⚠️ Error al eliminar $name"
           echo "✅ $name eliminado."
           sleep 1
         done
         echo ""
         echo "✅ Todos los CRDs de Longhorn fueron procesados."
-
-        # Validación final para verificar si aún existen CRDs de Longhorn
-        remaining_crds=$(kubectl get crd | grep 'longhorn.io' || echo "No CRDs restantes")
-        if [ "$remaining_crds" != "No CRDs restantes" ]; then
-          echo "⚠️ Algunos CRDs de Longhorn aún existen: $remaining_crds"
-          exit 1
-        else
-          echo "✅ Todos los CRDs de Longhorn han sido eliminados correctamente."
-        fi
       register: crd_cleanup
       changed_when: "'eliminado' in crd_cleanup.stdout or 'deleted' in crd_cleanup.stdout"
       failed_when: false
@@ -79,7 +113,7 @@
     - name: 🔍 Verificar si los CRDs de Longhorn fueron eliminados
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        crd_check=$(kubectl get crd | grep 'longhorn.io')
+        crd_check=$(kubectl get crd --kubeconfig {{ kubeconfig_path }} | grep 'longhorn.io')
         if [ -n "$crd_check" ]; then
           echo "⚠️ Los CRDs de Longhorn aún existen: $crd_check"
           exit 1
@@ -90,13 +124,32 @@
       failed_when: crd_verification.rc != 0
       changed_when: false
 
+- name: 🗑️ 5 - Eliminar el namespace Longhorn
+  hosts: controller
+  become: true
+  gather_facts: false
+  when: longhorn_ns_check.rc == 0
+
+  vars:
+    kubeconfig_path: "/home/victory/.kube/config"
+    kubectl_bin: "/usr/local/bin/kubectl"
+    namespace: "longhorn-system"
+
+  tasks:
     - name: 🧨 Verificar y eliminar finalizers del namespace si existen
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        if {{ kubectl_bin }} get namespace {{ namespace }} -o json | jq -e '.spec.finalizers | length > 0' > /dev/null; then
-          {{ kubectl_bin }} get namespace {{ namespace }} -o json | jq 'del(.spec.finalizers)' > /tmp/ns-clean.json
-          {{ kubectl_bin }} replace --raw "/api/v1/namespaces/{{ namespace }}/finalize" -f /tmp/ns-clean.json || true
-          rm -f /tmp/ns-clean.json
+        if {{ kubectl_bin }} get namespace {{ namespace }} --kubeconfig {{ kubeconfig_path }} -o json | jq -e '.spec.finalizers | length > 0' > /dev/null; then
+          echo "⚠️ Se encontraron finalizers en el namespace '{{ namespace }}'. Intentando eliminarlos..."
+          kubectl patch namespace {{ namespace }} --kubeconfig {{ kubeconfig_path }} -p '{"metadata":{"finalizers":[]}}' --type=merge
+          sleep 5
+          if {{ kubectl_bin }} get namespace {{ namespace }} --kubeconfig {{ kubeconfig_path }} -o json | jq -e '.spec.finalizers | length > 0' > /dev/null; then
+            echo "⚠️ Los finalizers del namespace aún persisten."
+          else
+            echo "✅ Finalizers del namespace eliminados."
+          fi
+        else
+          echo "✅ El namespace '{{ namespace }}' no tiene finalizers."
         fi
       changed_when: true
       failed_when: false
@@ -104,33 +157,43 @@
     - name: ❌ Eliminar el namespace completamente (con espera activa)
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        {{ kubectl_bin }} delete namespace {{ namespace }} --ignore-not-found
-        for i in $(seq 1 24); do
-          sleep 5
-          {{ kubectl_bin }} get namespace {{ namespace }} &>/dev/null || exit 0
+        echo "💣 Intentando eliminar el namespace '{{ namespace }}'..."
+        {{ kubectl_bin }} delete namespace {{ namespace }} --kubeconfig {{ kubeconfig_path }} --grace-period=0 --force --ignore-not-found
+        for i in $(seq 1 30); do
+          sleep 2
+          if ! {{ kubectl_bin }} get namespace {{ namespace }} --kubeconfig {{ kubeconfig_path }} &>/dev/null; then
+            echo "✅ Namespace '{{ namespace }}' eliminado."
+            exit 0
+          fi
         done
-        echo "⚠️ Namespace sigue existiendo tras esperar 120s."
+        echo "⚠️ El namespace '{{ namespace }}' sigue existiendo después de 60 segundos. Puede haber un problema."
         exit 1
       register: ns_delete_result
       failed_when: ns_delete_result.rc != 0
       changed_when: true
 
-    - name: 🚨 Forzar eliminación final si aún existe
+    - name: 🚨 Forzar eliminación final si aún existe (método alternativo)
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        if {{ kubectl_bin }} get namespace {{ namespace }} &>/dev/null; then
-          {{ kubectl_bin }} get namespace {{ namespace }} -o json | jq 'del(.spec.finalizers)' > /tmp/ns-force.json
-          {{ kubectl_bin }} replace --raw "/api/v1/namespaces/{{ namespace }}/finalize" -f /tmp/ns-force.json || true
+        if {{ kubectl_bin }} get namespace {{ namespace }} --kubeconfig {{ kubeconfig_path }} &>/dev/null; then
+          echo "🚨 Intentando forzar la eliminación del namespace '{{ namespace }}' por método alternativo..."
+          kubectl get namespace {{ namespace }} --kubeconfig {{ kubeconfig_path }} -o json | jq 'del(.spec.finalizers)' > /tmp/ns-force.json
+          kubectl replace --raw "/api/v1/namespaces/{{ namespace }}/finalize" -f /tmp/ns-force.json --force --grace-period=0 --kubeconfig {{ kubeconfig_path }} || true
           rm -f /tmp/ns-force.json
+          sleep 5
+          {{ kubectl_bin }} delete namespace {{ namespace }} --force --grace-period=0 --ignore-not-found --kubeconfig {{ kubeconfig_path }} || true
+          echo "✅ Intento de eliminación forzada completado."
+        else
+          echo "✅ El namespace ya no existe."
         fi
       changed_when: true
       failed_when: false
 
-    - name: 🧾 Mostrar resumen de limpieza de CRDs
+    - name: 🧾 Mostrar resumen de limpieza del namespace
       debug:
-        var: crd_cleanup.stdout_lines
+        var: ns_delete_result
 
-- name: 💽 3 - Limpiar completamente /dev/vdb en storage y workers
+- name: 💽 6 - Limpiar completamente /dev/vdb en storage y workers
   hosts: storage,workers
   become: true
   gather_facts: false
