@@ -1,4 +1,4 @@
-# playbooks/03_prepare_storage-workers.yml
+# playbooks\cleanup_longhorn.yml
 ---
 - name: 💣 Limpiar completamente /dev/vdb en storage y workers
   hosts: storage,workers
@@ -9,6 +9,7 @@
 
     - name: 🔍 Mostrar si hay montajes activos en /dev/vdb
       raw: mount | grep vdb || true
+      changed_when: false
 
     - name: 💣 Desmontar volúmenes y esperar
       raw: |
@@ -29,7 +30,7 @@
       failed_when: umount_check.rc != 0
       changed_when: false
 
-    - name: ❌ Detener servicios que puedan bloquear el disco (opcional)
+    - name: ❌ Detener servicios que puedan bloquear el disco (solo storage)
       raw: |
         systemctl stop nfs-server || true
         systemctl stop iscsid || true
@@ -55,3 +56,28 @@
 
     - name: 🧼 Esperar a que el sistema asiente los cambios
       raw: udevadm settle
+
+# Limpieza de recursos de Kubernetes
+- name: 🧹 Limpiar namespace de Longhorn y recursos relacionados en Kubernetes
+  hosts: controller
+  become: true
+  gather_facts: false
+
+  vars:
+    kubeconfig_path: "/home/victory/.kube/config"
+    longhorn_namespace: "longhorn-system"
+
+  tasks:
+    - name: ❌ Borrar recursos de Longhorn con kubectl
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        kubectl delete all --all -n {{ longhorn_namespace }} || true
+        kubectl delete pvc --all -n {{ longhorn_namespace }} || true
+        kubectl delete pv --all || true
+      changed_when: false
+
+    - name: 🧨 Eliminar namespace de Longhorn (si existe)
+      raw: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        kubectl delete namespace {{ longhorn_namespace }} || true
+      changed_when: false
