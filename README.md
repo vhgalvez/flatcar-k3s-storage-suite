@@ -133,6 +133,15 @@ sudo ansible-playbook playbooks/08_cleanup_longhorn.yml -i inventory/hosts.ini -
 
 ![alt text](image/alamacenamiento_storage.png)
 
+
+despliegue de Longhorn en el pods longhorn
+
+
+![alt text](image/longhorn_dashboard.png)
+
+![alt text](image/k3s_ansible_Longhorn_02.png)
+![alt text](image/k3s_ansible_Longhorn.png)
+
 ---
 
 ## 🛡️ Conclusión
@@ -145,3 +154,10 @@ Este conjunto de playbooks garantiza una configuración de almacenamiento automa
 
 
 ## 📜 Licencia este proyecto está licenciado bajo la **Licencia MIT** [LICENSE](LICENSE).
+
+
+sudo env "PATH=$PATH" KUBECONFIG=$HOME/.kube/config nohup kubectl port-forward -n longhorn-system svc/longhorn-frontend --address 0.0.0.0 8080:80 > ~/longhorn-frontend.log 2>&1 &
+
+kubectl get pods -n longhorn-system -o wide
+kubectl get nodes -o wide
+kubectl get storageclass
