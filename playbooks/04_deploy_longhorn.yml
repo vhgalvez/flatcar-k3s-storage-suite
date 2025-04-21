@@ -113,3 +113,13 @@
     - name: ✅ Resultado del despliegue
       debug:
         var: volumes_info.stdout_lines
+
+    - name: 🧹 Eliminar pods helm-install-traefik* completados (si Helm terminó bien)
+      shell: |
+        {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get pods -n kube-system -o json |
+        jq -r '.items[] | select(.status.phase=="Succeeded" or .status.phase=="Completed") | select(.metadata.name | test("^helm-install-traefik")) | .metadata.name' |
+        xargs -r -n1 {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} delete pod -n kube-system
+      register: delete_helm_pods
+      changed_when: "'deleted' in delete_helm_pods.stdout or delete_helm_pods.stderr"
+      failed_when: false
+      when: longhorn_install is defined and longhorn_install.rc == 0
