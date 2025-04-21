@@ -17,7 +17,6 @@
         {{ helm_bin }} uninstall {{ release_name }} -n {{ namespace }} || true
       changed_when: true
 
-
 - name: 🧼 2 - Borrar recursos del namespace Longhorn + eliminar CRDs y namespace
   hosts: controller
   become: true
