@@ -56,9 +56,9 @@
     - name: 🧼 Esperar a que el sistema asiente los cambios
       raw: udevadm settle
 
-# ------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------
 
-- name: 🧹 Limpiar namespace de Longhorn y recursos relacionados en Kubernetes
+- name: 🧹 Limpiar namespace, CRDs y finalizadores de Longhorn
   hosts: controller
   become: true
   gather_facts: false
@@ -68,21 +68,45 @@
     longhorn_namespace: "longhorn-system"
 
   tasks:
-    - name: ❌ Borrar recursos de Longhorn con kubectl
+
+    - name: 🧹 Desinstalar Longhorn con Helm (si existe release)
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        if kubectl get namespace {{ longhorn_namespace }} &>/dev/null; then
-          echo "✅ Eliminando recursos del namespace '{{ longhorn_namespace }}'..."
-          kubectl delete all --all -n {{ longhorn_namespace }} || true
-          kubectl delete pvc --all -n {{ longhorn_namespace }} || true
-          kubectl delete pv --all || true
-        else
-          echo "⚠️ Namespace '{{ longhorn_namespace }}' no existe. Nada que limpiar."
-        fi
+        helm list -n {{ longhorn_namespace }} | grep longhorn && \
+        helm uninstall longhorn -n {{ longhorn_namespace }} || true
       changed_when: false
 
-    - name: 🧨 Eliminar namespace de Longhorn (si existe)
+    - name: ❌ Borrar recursos del namespace
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        kubectl delete namespace {{ longhorn_namespace }} || true
+        kubectl delete all --all -n {{ longhorn_namespace }} --ignore-not-found
+        kubectl delete pvc --all -n {{ longhorn_namespace }} --ignore-not-found
+        kubectl delete pv --all --ignore-not-found
+        kubectl delete deployment,daemonset,pod -n {{ longhorn_namespace }} --all --ignore-not-found
       changed_when: false
+
+    - name: 🧨 Forzar eliminación del namespace si sigue existiendo
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        kubectl get namespace {{ longhorn_namespace }} &>/dev/null || exit 0
+        kubectl patch namespace {{ longhorn_namespace }} -p '{"metadata":{"finalizers":[]}}' --type=merge || true
+        kubectl delete namespace {{ longhorn_namespace }} --ignore-not-found
+      changed_when: false
+
+    - name: 💣 Eliminar CRDs de Longhorn
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        kubectl get crds | grep longhorn.io | awk '{print $1}' | xargs -r kubectl delete crd || true
+      changed_when: false
+
+    - name: ✅ Verificar que todo fue eliminado
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        echo "Pods activos:"
+        kubectl get pods -A | grep longhorn || echo "✅ Ningún pod de Longhorn activo"
+      register: check_result
+      changed_when: false
+
+    - name: 🧾 Mostrar resumen
+      debug:
+        var: check_result.stdout_lines
