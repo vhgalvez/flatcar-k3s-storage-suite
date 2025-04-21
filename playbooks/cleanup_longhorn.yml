@@ -107,8 +107,11 @@
     - name: 🧹 Desinstalar Helm release (si existe)
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        if {{ helm_bin }} list -n {{ namespace }} | grep -q {{ release_name }}; then
+        if {{ helm_bin }} list -A | grep -q "^{{ release_name }}"; then
+          echo "🧹 Eliminando release '{{ release_name }}' del namespace '{{ namespace }}'..."
           {{ helm_bin }} uninstall {{ release_name }} -n {{ namespace }} || true
+        else
+          echo "✅ No hay release '{{ release_name }}' registrado en Helm."
         fi
       changed_when: false
 
