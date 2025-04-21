@@ -39,7 +39,7 @@
         export KUBECONFIG={{ kubeconfig_path }}
         {{ kubectl_bin }} delete all --all -n {{ namespace }} --ignore-not-found
         {{ kubectl_bin }} delete pvc --all -n {{ namespace }} --ignore-not-found
-        {{ kubectl_bin }} delete pv --all --ignore-not-found
+        {{ kubectl_bin }} delete pv --all -n {{ namespace }} --ignore-not-found
         echo "🧹 Recursos de Longhorn eliminados del namespace {{ namespace }}."
       changed_when: true
 
@@ -53,10 +53,10 @@
           echo "🔧 Procesando CRD: $name"
           {{ kubectl_bin }} get crd "$name" || echo "⚠️ CRD $name ya no existe"
           echo "🔄 Quitando finalizers..."
-          {{ kubectl_bin }} patch crd "$name" -p '{"metadata":{"finalizers":[]}}' --type=merge || echo "⚠️ Error al quitar finalizers de $name"
+          timeout 30 {{ kubectl_bin }} patch crd "$name" -p '{"metadata":{"finalizers":[]}}' --type=merge || echo "⚠️ Error al quitar finalizers de $name"
           sleep 1
           echo "❌ Eliminando CRD $name..."
-          {{ kubectl_bin }} delete crd "$name" --grace-period=0 --force || echo "⚠️ Error al eliminar $name"
+          timeout 30 {{ kubectl_bin }} delete crd "$name" --grace-period=0 --force || echo "⚠️ Error al eliminar $name (posible bloqueo)"
           echo "✅ $name eliminado."
           sleep 1
         done

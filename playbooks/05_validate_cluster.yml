@@ -17,7 +17,7 @@
   pre_tasks:
 
     - name: 🔍 Comprobar si existe el namespace Longhorn
-      raw: kubectl get namespace {{ longhorn_namespace }} || true
+      shell: kubectl get namespace {{ longhorn_namespace }} || true
       register: ns_check
       changed_when: false
 
