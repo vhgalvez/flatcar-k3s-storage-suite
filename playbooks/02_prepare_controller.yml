@@ -86,6 +86,12 @@
             user:
               token: "{{ token_raw.stdout | trim }}"
 
+    - name: 📁 Crear directorio temporal para instalar Helm
+      file:
+        path: "{{ helm_install_tmp }}"
+        state: directory
+        mode: '0755'
+
     - name: 📥 Descargar Helm {{ helm_version }}
       get_url:
         url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
