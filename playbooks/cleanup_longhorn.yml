@@ -5,8 +5,15 @@
   gather_facts: false
   become: true
 
-  tasks:
+  pre_tasks:
+    - name: ⚠️ Confirmar que se desea ejecutar la limpieza
+      fail:
+        msg: |
+          🚫 Este playbook eliminará todos los datos de almacenamiento de Longhorn y sus recursos en Kubernetes.
+          Ejecuta con el parámetro "-e confirm_cleanup=yes" si realmente deseas proceder.
+      when: confirm_cleanup is not defined or confirm_cleanup != "yes"
 
+  tasks:
     - name: 🔍 Mostrar si hay montajes activos en /dev/vdb
       raw: mount | grep vdb || true
       changed_when: false
@@ -30,7 +37,7 @@
       failed_when: umount_check.rc != 0
       changed_when: false
 
-    - name: ❌ Detener servicios que puedan bloquear el disco (solo storage)
+    - name: ❌ Detener servicios que puedan bloquear el disco (solo en storage)
       raw: |
         systemctl stop nfs-server || true
         systemctl stop iscsid || true
@@ -57,7 +64,8 @@
     - name: 🧼 Esperar a que el sistema asiente los cambios
       raw: udevadm settle
 
-# Limpieza de recursos de Kubernetes
+# ------------------------------------------------------------------------
+
 - name: 🧹 Limpiar namespace de Longhorn y recursos relacionados en Kubernetes
   hosts: controller
   become: true
@@ -67,17 +75,27 @@
     kubeconfig_path: "/home/victory/.kube/config"
     longhorn_namespace: "longhorn-system"
 
+  pre_tasks:
+    - name: ⚠️ Confirmar que se desea ejecutar la limpieza (controlador)
+      fail:
+        msg: |
+          🚫 Este playbook eliminará todos los recursos de Longhorn en Kubernetes.
+          Ejecuta con "-e confirm_cleanup=yes" si realmente deseas proceder.
+      when: confirm_cleanup is not defined or confirm_cleanup != "yes"
+
   tasks:
     - name: ❌ Borrar recursos de Longhorn con kubectl
-      raw: |
+      shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        kubectl delete all --all -n {{ longhorn_namespace }} || true
-        kubectl delete pvc --all -n {{ longhorn_namespace }} || true
-        kubectl delete pv --all || true
+        kubectl get ns {{ longhorn_namespace }} && {
+          kubectl delete all --all -n {{ longhorn_namespace }} || true
+          kubectl delete pvc --all -n {{ longhorn_namespace }} || true
+          kubectl delete pv --all || true
+        } || echo "Namespace {{ longhorn_namespace }} no existe"
       changed_when: false
 
     - name: 🧨 Eliminar namespace de Longhorn (si existe)
-      raw: |
+      shell: |
         export KUBECONFIG={{ kubeconfig_path }}
         kubectl delete namespace {{ longhorn_namespace }} || true
       changed_when: false
