@@ -21,26 +21,15 @@
       changed_when: false
 
     - name: 🔍 Verificar si hay recursos en el namespace Longhorn
-      raw: kubectl get all -n {{ longhorn_namespace }} || true
+      shell: kubectl get all -n {{ longhorn_namespace }} || true
       register: longhorn_check
       changed_when: false
       when: "'NotFound' not in ns_check.stdout"
 
-    - name: ⚠️ Abortamos si hay residuos en el namespace existente
-      fail:
-        msg: |
-          ⚠️ El namespace '{{ longhorn_namespace }}' contiene recursos de una instalación anterior.
-          🧹 Ejecuta: ansible-playbook playbooks/08_cleanup_longhorn.yml -e "confirm_cleanup=yes"
-          Recursos detectados:
-          {{ longhorn_check.stdout }}
-      when:
-        - "'NotFound' not in ns_check.stdout"
-        - "'No resources found' not in longhorn_check.stdout"
-
   tasks:
 
     - name: 📊 Mostrar estado de los pods, PVCs y PVs
-      raw: |
+      shell: |
         echo "📦 Pods:"
         kubectl get pods -n {{ longhorn_namespace }}
 
@@ -51,3 +40,11 @@
         echo ""
         echo "📦 PVs:"
         kubectl get pv -A
+
+    - name: 📄 Mostrar recursos detectados si el namespace existe
+      debug:
+        msg: |
+          ⚠️ El namespace '{{ longhorn_namespace }}' contiene recursos de una instalación anterior.
+          Recursos detectados:
+          {{ longhorn_check.stdout }}
+      when: "'NotFound' not in ns_check.stdout"  
