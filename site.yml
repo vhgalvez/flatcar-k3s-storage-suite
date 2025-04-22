@@ -12,6 +12,3 @@
 
 - name: 🚀 4 - Desplegar Longhorn desde controller
   import_playbook: playbooks/04_deploy_longhorn.yml
-
-- name: ✅ 5 - Validar clúster y estado de Longhorn
-  import_playbook: playbooks/05_validate_cluster.yml
