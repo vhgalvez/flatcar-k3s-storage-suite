@@ -8,39 +8,43 @@
   vars:
     kubeconfig_path: "/home/victory/.kube/config"
     longhorn_namespace: "longhorn-system"
-    kubectl_path: "/usr/local/bin/kubectl"
 
-  tasks:
+  environment:
+    PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+  pre_tasks:
 
     - name: 🔍 Comprobar si existe el namespace Longhorn
-      shell: "{{ kubectl_path }} get namespace {{ longhorn_namespace }} || true"
+      shell: kubectl get namespace {{ longhorn_namespace }} || true
       register: ns_check
       changed_when: false
 
     - name: 🔍 Verificar si hay recursos en el namespace Longhorn
-      shell: "{{ kubectl_path }} get all -n {{ longhorn_namespace }} || true"
+      shell: kubectl get all -n {{ longhorn_namespace }} || true
       register: longhorn_check
       changed_when: false
       when: "'NotFound' not in ns_check.stdout"
 
+  tasks:
+
     - name: 📊 Mostrar estado de los pods, PVCs y PVs
       shell: |
         echo "📦 Pods:"
-        {{ kubectl_path }} get pods -n {{ longhorn_namespace }}
+        kubectl get pods -n {{ longhorn_namespace }}
 
         echo ""
         echo "📁 PVCs:"
-        {{ kubectl_path }} get pvc -A
+        kubectl get pvc -A
 
         echo ""
         echo "📦 PVs:"
-        {{ kubectl_path }} get pv -A
-      register: estado_recursos
-      changed_when: false
+        kubectl get pv -A
 
     - name: 📄 Mostrar recursos detectados si el namespace existe
       debug:
         msg: |
-          ⚠️ El namespace '{{ longhorn_namespace }}' contiene recursos activos:
+          ⚠️ El namespace '{{ longhorn_namespace }}' contiene recursos de una instalación anterior.
+          Recursos detectados:
           {{ longhorn_check.stdout }}
-      when: "'NotFound' not in ns_check.stdout"
+      when: "'NotFound' not in ns_check.stdout"  
