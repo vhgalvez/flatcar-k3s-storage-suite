@@ -1,4 +1,3 @@
-# playbooks\05_validate_cluster.yml
 # playbooks/05_validate_cluster.yml
 ---
 - name: 🚀 5 - Validar la instalación de Longhorn
