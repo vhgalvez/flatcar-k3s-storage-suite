@@ -171,7 +171,8 @@ kubectl get storageclass
 sudo env "PATH=$PATH" KUBECONFIG=$HOME/.kube/config nohup kubectl port-forward -n longhorn-system svc/longhorn-frontend --address 0.0.0.0 8080:80 > ~/longhorn-frontend.log 2>&1 &
 ```
 
-
+kubectl get ns -o wide
+kubectl get pods -n longhorn-system -o wide 
 
 🔍 1. Ver el estado del Helm release de Longhorn
 bash
