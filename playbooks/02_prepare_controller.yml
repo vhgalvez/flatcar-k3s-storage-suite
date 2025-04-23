@@ -1,13 +1,20 @@
-# playbooks\02_prepare_controller.yml
+# playbooks/02_prepare_controller.yml
+# 🔧 Este playbook instala kubectl y helm en el nodo controller.
+# 📦 Las versiones y rutas están definidas arriba para facilitar mantenimiento.
+
 ---
+
 - name: 2 Preparar nodo controlador con kubectl y helm
   hosts: controller
   become: true
   gather_facts: true
 
   vars:
-    kubectl_version: "v1.29.0"
-    helm_version: "v3.14.0"
+    # 📦 Versiones configurables
+    kubectl_version: "v1.33.0"
+    helm_version: "v3.17.3"
+
+    # 📁 Rutas de instalación
     kubectl_path: "/usr/local/bin/kubectl"
     helm_path: "/usr/local/bin/helm"
     helm_install_tmp: "/tmp/helm_install"
