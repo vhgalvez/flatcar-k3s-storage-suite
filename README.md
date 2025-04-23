@@ -102,12 +102,12 @@ Si necesitas **reiniciar desde cero** los discos de los nodos de almacenamiento 
 
 ### ▶️ Ejecución real:
 ```bash
-sudo ansible-playbook playbooks/06_cleanup_longhorn.yml -i inventory/hosts.ini -e "confirm_cleanup=yes"
+sudo ansible-playbook playbooks/cleanup_longhorn.yml -i inventory/hosts.ini -e "confirm_cleanup=yes"
 ```
 
 ### 🔍 Ejecución en modo verificación (no realiza cambios):
 ```bash
-sudo ansible-playbook playbooks/08_cleanup_longhorn.yml -i inventory/hosts.ini --check -e "confirm_cleanup=yes"
+sudo ansible-playbook playbooks/cleanup_longhorn.yml -i inventory/hosts.ini --check -e "confirm_cleanup=yes"
 ```
 
 > Este playbook **no se ejecutará** sin la confirmación explícita `confirm_cleanup=yes`.
@@ -172,3 +172,54 @@ sudo env "PATH=$PATH" KUBECONFIG=$HOME/.kube/config nohup kubectl port-forward -
 ```
 
 
+
+🔍 1. Ver el estado del Helm release de Longhorn
+bash
+Copiar
+Editar
+helm status longhorn -n longhorn-system
+Esto te muestra:
+
+Fase de despliegue (STATUS: deployed, pending-install, etc.)
+
+Recursos creados (pods, PVCs, servicios, etc.)
+
+Eventos recientes
+
+📜 2. Ver todos los recursos desplegados
+bash
+Copiar
+Editar
+kubectl get all -n longhorn-system
+Puedes repetirlo varias veces para ver cómo se van creando los pods.
+
+📦 3. Ver estado de los pods
+bash
+Copiar
+Editar
+kubectl get pods -n longhorn-system -o wide
+Esto es útil para ver si hay errores (CrashLoopBackOff, Pending, etc.).
+
+📄 4. Ver eventos del namespace
+bash
+Copiar
+Editar
+kubectl get events -n longhorn-system --sort-by='.metadata.creationTimestamp'
+Te da un resumen cronológico de lo que está ocurriendo, como errores de scheduling o problemas de volúmenes.
+
+⚙️ 5. Ver logs de un pod específico
+bash
+Copiar
+Editar
+kubectl logs -n longhorn-system <nombre-del-pod>
+Por ejemplo:
+
+bash
+Copiar
+Editar
+kubectl logs -n longhorn-system longhorn-manager-xxxxx
+✅ Extra: Esperar hasta que los pods estén todos listos
+bash
+Copiar
+Editar
+kubectl wait --for=condition=Ready pod --all -n longhorn-system --timeout=300s
