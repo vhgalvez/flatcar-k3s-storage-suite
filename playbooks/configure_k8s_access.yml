@@ -9,6 +9,7 @@
     kubeconfig_path: "/home/victory/.kube/config"
     kubeconfig_token_path: "/home/victory/.kube/token.jwt"
     vip_kubernetes: "10.17.5.10"
+    kubectl_path: "/usr/local/bin/kubectl"
 
   pre_tasks:
     - name: 📄 Leer token JWT desde el primer master
@@ -17,7 +18,7 @@
       delegate_to: "{{ groups['masters'][0] }}"
       changed_when: false
 
-    - name: 📥 Guardar token JWT en el nodo controlador
+    - name: 📅 Guardar token JWT en el nodo controlador
       copy:
         content: "{{ token_raw.stdout | trim }}"
         dest: "{{ kubeconfig_token_path }}"
@@ -60,7 +61,7 @@
               token: "{{ token_raw.stdout | trim }}"
 
     - name: 🧪 Verificar conexión con el clúster Kubernetes
-      command: kubectl get nodes
+      command: "{{ kubectl_path }} get nodes"
       environment:
         KUBECONFIG: "{{ kubeconfig_path }}"
       register: kubectl_result
