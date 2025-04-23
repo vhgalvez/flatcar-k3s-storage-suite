@@ -1,6 +1,6 @@
 # playbooks\02_prepare_controller.yml
 ---
-- name: 2 Preparar nodo controlador con kubectl, helm y configuración de acceso
+- name: 2 Preparar nodo controlador con kubectl y helm
   hosts: controller
   become: true
   gather_facts: true
@@ -11,24 +11,6 @@
     kubectl_path: "/usr/local/bin/kubectl"
     helm_path: "/usr/local/bin/helm"
     helm_install_tmp: "/tmp/helm_install"
-    kubeconfig_path: "/home/victory/.kube/config"
-    kubeconfig_token_path: "/home/victory/.kube/token.jwt"
-    vip_kubernetes: "10.17.5.10"
-
-  pre_tasks:
-    - name: 📄 Leer token JWT desde master1 usando raw
-      raw: cat /tmp/traefik-token.jwt
-      register: token_raw
-      delegate_to: "{{ groups['masters'][0] }}"
-      changed_when: false
-
-    - name: 📥 Guardar token en el controlador
-      copy:
-        content: "{{ token_raw.stdout | trim }}"
-        dest: "{{ kubeconfig_token_path }}"
-        owner: victory
-        group: victory
-        mode: "0600"
 
   tasks:
     - name: 📦 Instalar paquetes base
@@ -40,7 +22,7 @@
       pip:
         name: kubernetes
 
-    - name: 📥 Descargar kubectl {{ kubectl_version }}
+    - name: 📅 Descargar kubectl {{ kubectl_version }}
       get_url:
         url: "https://dl.k8s.io/release/{{ kubectl_version }}/bin/linux/amd64/kubectl"
         dest: /tmp/kubectl
@@ -53,46 +35,13 @@
         remote_src: yes
         mode: "0755"
 
-    - name: 📁 Crear directorio .kube si no existe
-      file:
-        path: "{{ kubeconfig_path | dirname }}"
-        state: directory
-        owner: victory
-        group: victory
-        mode: "0700"
-
-    - name: 🔐 Crear kubeconfig limpio con JWT
-      copy:
-        dest: "{{ kubeconfig_path }}"
-        owner: victory
-        group: victory
-        mode: "0600"
-        content: |
-          apiVersion: v1
-          kind: Config
-          clusters:
-          - name: default
-            cluster:
-              server: https://{{ vip_kubernetes }}:6443
-              insecure-skip-tls-verify: true
-          contexts:
-          - name: default
-            context:
-              cluster: default
-              user: remote-access
-          current-context: default
-          users:
-          - name: remote-access
-            user:
-              token: "{{ token_raw.stdout | trim }}"
-
     - name: 📁 Crear directorio temporal para instalar Helm
       file:
         path: "{{ helm_install_tmp }}"
         state: directory
         mode: "0755"
 
-    - name: 📥 Descargar Helm {{ helm_version }}
+    - name: 📅 Descargar Helm {{ helm_version }}
       get_url:
         url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
         dest: "{{ helm_install_tmp }}/helm.tar.gz"
@@ -114,15 +63,3 @@
       file:
         path: "{{ helm_install_tmp }}"
         state: absent
-
-    - name: 🧪 Verificar acceso a Kubernetes
-      command: "{{ kubectl_path }} get nodes"
-      environment:
-        KUBECONFIG: "{{ kubeconfig_path }}"
-      register: kubectl_nodes
-      failed_when: kubectl_nodes.rc != 0
-      changed_when: false
-
-    - name: 📊 Mostrar nodos disponibles
-      debug:
-        msg: "{{ kubectl_nodes.stdout }}"

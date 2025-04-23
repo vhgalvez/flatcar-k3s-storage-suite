@@ -4,10 +4,13 @@
 - name: 🔐 1 - Generar token JWT en master con permisos correctos
   import_playbook: playbooks/01_generate_token.yml
 
-- name: 🔧 2 - Preparar nodo controlador (kubectl + helm + kubeconfig + token)
+- name: 🔧 2 - Preparar nodo controlador (kubectl + helm)
   import_playbook: playbooks/02_prepare_controller.yml
 
-- name: 💾 3 - Preparar almacenamiento en nodo storage y workers
+- name: 🔑 2.1 - Configurar acceso del controlador al clúster (kubeconfig + token)
+  import_playbook: playbooks/configure_k8s_access.yml
+
+- name: 📀 3 - Preparar almacenamiento en nodo storage y workers
   import_playbook: playbooks/03_prepare_storage-workers.yml
 
 - name: 🚀 4 - Desplegar Longhorn desde controller
