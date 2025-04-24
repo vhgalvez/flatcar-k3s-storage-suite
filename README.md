@@ -224,3 +224,14 @@ bash
 Copiar
 Editar
 kubectl wait --for=condition=Ready pod --all -n longhorn-system --timeout=300s
+
+
+# muestra el estado de los port-forwards
+ ps aux | grep port-forward
+ 
+# ✅ Matar antiguos
+sudo pkill -f "kubectl port-forward"
+
+
+sudo env "PATH=$PATH" KUBECONFIG=$HOME/.kube/config \
+nohup kubectl port-forward -n longhorn-system svc/longhorn-frontend --address 0.0.0.0 8080:80 > ~/longhorn-frontend.log 2>&1 &
