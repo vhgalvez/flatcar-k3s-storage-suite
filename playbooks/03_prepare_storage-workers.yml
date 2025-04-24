@@ -6,6 +6,20 @@
   become: true
 
   tasks:
+    # === REQUISITOS PARA LONGHORN ===
+
+    - name: 📦 Instalar paquete iSCSI initiator (RHEL-based)
+      raw: |
+        which iscsiadm || (dnf install -y iscsi-initiator-utils)
+      register: iscsi_rhel_install
+      changed_when: "'Complete!' in iscsi_rhel_install.stdout or 'installed' in iscsi_rhel_install.stdout"
+      failed_when: false
+
+    - name: 🔄 Activar y arrancar iscsid (RHEL-based)
+      raw: systemctl enable --now iscsid
+      when: iscsi_rhel_install is defined
+      ignore_errors: true
+
     # === VALIDACIÓN INICIAL SEGURA ===
 
     - name: 🔒 Bloquear si /dev/vdb está montado (para evitar sobrescritura)
