@@ -6,15 +6,15 @@ Este proyecto Ansible proporciona playbooks seguros para configurar almacenamien
 
 ---
 
-## ⚙️ Componentes incluidos
+## ⚙️ Componentes Incluidos
 
 - Configuración de volúmenes LVM para:
   - PostgreSQL (`/srv/nfs/postgresql`)
   - Datos compartidos (`/srv/nfs/shared`)
   - Longhorn (`/mnt/longhorn-disk`)
-- Exportación NFS (automática)
-- Preparación automática y segura de discos `/dev/vdb`
-- Playbook de limpieza con confirmación obligatoria
+- Exportación NFS (automática).
+- Preparación automática y segura de discos `/dev/vdb`.
+- Playbook de limpieza con confirmación obligatoria.
 
 ---
 
@@ -29,31 +29,29 @@ Este proyecto Ansible proporciona playbooks seguros para configurar almacenamien
 
 ## ✅ Ejecución Segura - Paso a Paso
 
-### 1. Configurar acceso SSH
+### 1. Configurar Acceso SSH
 Configure acceso mediante clave SSH al usuario `core` desde el nodo de control hacia todos los nodos del clúster.
 
-### 2. Verificar inventario (`inventory/hosts.ini`)
+### 2. Verificar Inventario (`inventory/hosts.ini`)
 Confirme que los nodos estén correctamente agrupados:
-- Grupo `storage`: nodos con volúmenes LVM y NFS (ej. `10.17.4.27`)
-- Grupo `workers`: nodos con disco para Longhorn (`10.17.4.24`, `10.17.4.25`, etc.)
+- **Grupo `storage`:** Nodos con volúmenes LVM y NFS (ej. `10.17.4.27`).
+- **Grupo `workers`:** Nodos con disco para Longhorn (ej. `10.17.4.24`, `10.17.4.25`, etc.).
 
-### 3. Ejecutar configuración de almacenamiento
+### 3. Ejecutar Configuración de Almacenamiento
 ```bash
 sudo ansible-playbook -i inventory/hosts.ini site.yml
 ```
-
 Este playbook ejecuta:
-- **Detección y validación de discos**
-- **Particionado y creación de LVM**
-- **Formateo y montaje**
-- **Instalación de NFS**
-- **Habilitación del servicio**
+- **Detección y validación de discos.**
+- **Particionado y creación de LVM.**
+- **Formateo y montaje.**
+- **Instalación de NFS.**
+- **Habilitación del servicio.**
 
-### 4. Validar configuración de discos montados
+### 4. Validar Configuración de Discos Montados
 ```bash
 df -h
 ```
-
 Verifique:
 - `/srv/nfs/postgresql`
 - `/srv/nfs/shared`
@@ -61,86 +59,138 @@ Verifique:
 
 ---
 
-## 📘 Tareas y su descripción
+## 📘 Tareas y su Descripción
 
-### 🧱 `storage_setup` (rol)
-- Verificación segura de `/dev/vdb`
-- Particionado y creación de VG + LVs
-- Montaje y formateo
-- Exportación NFS
+### 🧱 `storage_setup` (Rol)
+- Verificación segura de `/dev/vdb`.
+- Particionado y creación de VG + LVs.
+- Montaje y formateo.
+- Exportación NFS.
 
-### 💾 `longhorn_worker` (rol)
-- Verificación segura de `/dev/vdb`
-- Formateo + montaje en `/mnt/longhorn-disk`
+### 💾 `longhorn_worker` (Rol)
+- Verificación segura de `/dev/vdb`.
+- Formateo y montaje en `/mnt/longhorn-disk`.
 
 ### 🚀 `install_longhorn.yml`
-- Etiquetado de nodos
-- Instala Longhorn
-- Espera readiness de pods
+- Etiquetado de nodos.
+- Instalación de Longhorn.
+- Espera readiness de pods.
 
 ### 🧹 `playbook_cleanup.yml`
-- Confirmación obligatoria con `confirm_cleanup=yes`
-- Detiene NFS
-- Desmonta volúmenes
-- Borra LVM y particiones
-- Seguro para reprovisionar nodos
+- Confirmación obligatoria con `confirm_cleanup=yes`.
+- Detiene NFS.
+- Desmonta volúmenes.
+- Borra LVM y particiones.
+- Seguro para reprovisionar nodos.
 
 ---
 
 ## 🧩 Estado de Discos
 
 | Nodo      | Disco SO (vda) | Uso Sistema | Disco Adicional (vdb) | Estado Disco |
-|-----------|----------------|-------------|------------------------|---------------|
-| worker1   | 20 GB          | ~2.5 GB     | 40 GB                  | Libre         |
-| storage1  | 10 GB          | ~2.5 GB     | 80 GB                  | Libre         |
+|-----------|----------------|-------------|------------------------|--------------|
+| worker1   | 20 GB          | ~2.5 GB     | 40 GB                  | Libre        |
+| storage1  | 10 GB          | ~2.5 GB     | 80 GB                  | Libre        |
 
 ---
 
-## 🧹 Limpieza del almacenamiento en nodos (opcional)
+## 🧹 Limpieza del Almacenamiento en Nodos (Opcional)
 
 Si necesitas **reiniciar desde cero** los discos de los nodos de almacenamiento (`storage`) o de los `workers` que usan `/dev/vdb` para Longhorn, puedes utilizar el siguiente playbook de limpieza:
 
-### ▶️ Ejecución real:
+### ▶️ Ejecución Real:
 ```bash
 sudo ansible-playbook playbooks/cleanup_longhorn.yml -i inventory/hosts.ini -e "confirm_cleanup=yes"
 ```
 
-### 🔍 Ejecución en modo verificación (no realiza cambios):
+### 🔍 Ejecución en Modo Verificación (No Realiza Cambios):
 ```bash
 sudo ansible-playbook playbooks/cleanup_longhorn.yml -i inventory/hosts.ini --check -e "confirm_cleanup=yes"
 ```
 
 > Este playbook **no se ejecutará** sin la confirmación explícita `confirm_cleanup=yes`.
 
-### ✅ ¿Qué hace este playbook?
-- Desmonta los volúmenes en `/srv/nfs/*` y `/mnt/longhorn-disk`
-- Borra los volúmenes lógicos (LVM) y el grupo de volúmenes en el nodo `storage`
-- Limpia la partición y la firma LVM del disco `/dev/vdb1` en `storage`
-- Ejecuta `wipefs` sobre `/dev/vdb` en nodos `workers`
-- Detiene y deshabilita el servicio `nfs-server` en `storage`
+### ✅ ¿Qué Hace Este Playbook?
+- Desmonta los volúmenes en `/srv/nfs/*` y `/mnt/longhorn-disk`.
+- Borra los volúmenes lógicos (LVM) y el grupo de volúmenes en el nodo `storage`.
+- Limpia la partición y la firma LVM del disco `/dev/vdb1` en `storage`.
+- Ejecuta `wipefs` sobre `/dev/vdb` en nodos `workers`.
+- Detiene y deshabilita el servicio `nfs-server` en `storage`.
 
 > ⚠️ **Este playbook no elimina máquinas virtuales ni destruye configuraciones fuera del disco `/dev/vdb`.**
 
 ---
 
-## 📊 Ejemplo de configuración
+## 📊 Ejemplo de Configuración
 
-![alt text](image/almacenamiento_cluster.png)
+![Configuración del Almacenamiento](image/almacenamiento_cluster.png)
 
-![alt text](image/clean_almacenamiento.png)
+![Limpieza del Almacenamiento](image/clean_almacenamiento.png)
 
-![alt text](image/alamacenamiento_workers.png)
+![Almacenamiento en Workers](image/alamacenamiento_workers.png)
 
-![alt text](image/alamacenamiento_storage.png)
+![Almacenamiento en Storage](image/alamacenamiento_storage.png)
 
+---
 
-despliegue de Longhorn en el pods longhorn
+## 🚀 Despliegue de Longhorn
 
-![alt text](image/longhorn_dashboard.png)
+### Comandos Útiles
 
-![alt text](image/k3s_ansible_Longhorn_02.png)
+#### Verificar Pods de Longhorn
+```bash
+kubectl get pods -n longhorn-system -o wide
+```
 
-![alt text](image/k3s_ansible_Longhorn.png)
+#### Verificar Nodos
+```bash
+kubectl get nodes -o wide
+```
+
+#### Verificar StorageClass
+```bash
+kubectl get storageclass
+```
+
+#### Port-Forward para Longhorn
+```bash
+sudo env "PATH=$PATH" KUBECONFIG=$HOME/.kube/config nohup kubectl port-forward -n longhorn-system svc/longhorn-frontend --address 0.0.0.0 8080:80 > ~/longhorn-frontend.log 2>&1 &
+```
+
+#### Verificar Recursos Desplegados
+```bash
+kubectl get all -n longhorn-system
+```
+
+#### Verificar Estado de Pods
+```bash
+kubectl get pods -n longhorn-system -o wide
+```
+
+#### Ver Eventos del Namespace
+```bash
+kubectl get events -n longhorn-system --sort-by='.metadata.creationTimestamp'
+```
+
+#### Ver Logs de un Pod Específico
+```bash
+kubectl logs -n longhorn-system <nombre-del-pod>
+```
+
+#### Esperar a que los Pods Estén Listos
+```bash
+kubectl wait --for=condition=Ready pod --all -n longhorn-system --timeout=300s
+```
+
+#### Verificar Port-Forwards Activos
+```bash
+ps aux | grep port-forward
+```
+
+#### Matar Port-Forwards Antiguos
+```bash
+sudo pkill -f "kubectl port-forward"
+```
 
 ---
 
@@ -148,90 +198,12 @@ despliegue de Longhorn en el pods longhorn
 
 Este conjunto de playbooks garantiza una configuración de almacenamiento automatizada y segura para su clúster Kubernetes con Flatcar. Gracias a las validaciones y protecciones incluidas, puede trabajar con confianza evitando daños accidentales al sistema operativo o pérdida de datos.
 
-> **Repositorio del proyecto:** [`flatcar-k3s-storage-suite`](https://github.com/vhgalvez/flatcar-k3s-storage-suite)
+> **Repositorio del Proyecto:** [`flatcar-k3s-storage-suite`](https://github.com/vhgalvez/flatcar-k3s-storage-suite)
 >
-> > Proyecto independiente para usarse como prerequisito en arquitecturas como [FlatcarMicroCloud](https://github.com/vhgalvez/FlatcarMicroCloud)
+> Proyecto independiente para usarse como prerequisito en arquitecturas como [FlatcarMicroCloud](https://github.com/vhgalvez/FlatcarMicroCloud).
 
+---
 
-## 📜 Licencia este proyecto está licenciado bajo la **Licencia MIT** [LICENSE](LICENSE).
+## 📜 Licencia
 
-
-## 🚀 Despliegue de Longhor
-
-
-```bash
-kubectl get pods -n longhorn-system -o wide
-kubectl get nodes -o wide
-kubectl get storageclass
-````
-
-
-# Port-forward puerto de Longhorn
-```bash
-sudo env "PATH=$PATH" KUBECONFIG=$HOME/.kube/config nohup kubectl port-forward -n longhorn-system svc/longhorn-frontend --address 0.0.0.0 8080:80 > ~/longhorn-frontend.log 2>&1 &
-```
-
-kubectl get ns -o wide
-kubectl get pods -n longhorn-system -o wide 
-
-🔍 1. Ver el estado del Helm release de Longhorn
-bash
-Copiar
-Editar
-helm status longhorn -n longhorn-system
-Esto te muestra:
-
-Fase de despliegue (STATUS: deployed, pending-install, etc.)
-
-Recursos creados (pods, PVCs, servicios, etc.)
-
-Eventos recientes
-
-📜 2. Ver todos los recursos desplegados
-bash
-Copiar
-Editar
-kubectl get all -n longhorn-system
-Puedes repetirlo varias veces para ver cómo se van creando los pods.
-
-📦 3. Ver estado de los pods
-bash
-Copiar
-Editar
-kubectl get pods -n longhorn-system -o wide
-Esto es útil para ver si hay errores (CrashLoopBackOff, Pending, etc.).
-
-📄 4. Ver eventos del namespace
-bash
-Copiar
-Editar
-kubectl get events -n longhorn-system --sort-by='.metadata.creationTimestamp'
-Te da un resumen cronológico de lo que está ocurriendo, como errores de scheduling o problemas de volúmenes.
-
-⚙️ 5. Ver logs de un pod específico
-bash
-Copiar
-Editar
-kubectl logs -n longhorn-system <nombre-del-pod>
-Por ejemplo:
-
-bash
-Copiar
-Editar
-kubectl logs -n longhorn-system longhorn-manager-xxxxx
-✅ Extra: Esperar hasta que los pods estén todos listos
-bash
-Copiar
-Editar
-kubectl wait --for=condition=Ready pod --all -n longhorn-system --timeout=300s
-
-
-# muestra el estado de los port-forwards
- ps aux | grep port-forward
- 
-# ✅ Matar antiguos
-sudo pkill -f "kubectl port-forward"
-
-
-sudo env "PATH=$PATH" KUBECONFIG=$HOME/.kube/config \
-nohup kubectl port-forward -n longhorn-system svc/longhorn-frontend --address 0.0.0.0 8080:80 > ~/longhorn-frontend.log 2>&1 &
+Este proyecto está licenciado bajo la **Licencia MIT**. Consulte el archivo [LICENSE](LICENSE) para más detalles.
