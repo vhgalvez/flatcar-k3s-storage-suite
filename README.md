@@ -131,9 +131,9 @@ sudo ansible-playbook playbooks/cleanup_longhorn.yml -i inventory/hosts.ini --ch
 
 ![Almacenamiento en Storage](image/alamacenamiento_storage.png)
 
-![alt text](additional_resources/image/k3s_ansible_Longhorn_02.png)
+![alt text](image/k3s_ansible_Longhorn_02.png)
 
-![alt text](additional_resources/image/k3s_ansible_Longhorn.png)
+![alt text](image/k3s_ansible_Longhorn.png)
 
 
 ---
