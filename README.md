@@ -38,10 +38,12 @@ Confirme que los nodos estén correctamente agrupados:
 - **Grupo `workers`:** Nodos con disco para Longhorn (ej. `10.17.4.24`, `10.17.4.25`, etc.).
 
 ### 3. Ejecutar Configuración de Almacenamiento
+
 ```bash
-sudo ansible-playbook -i inventory/hosts.ini site.yml
-```
+sudo ansible-playbook -i inventory/hosts.ini install_longhorn.yml
+
 Este playbook ejecuta:
+
 - **Detección y validación de discos.**
 - **Particionado y creación de LVM.**
 - **Formateo y montaje.**
