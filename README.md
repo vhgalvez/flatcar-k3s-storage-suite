@@ -158,9 +158,20 @@ kubectl get storageclass
 ```
 
 #### Port-Forward para Longhorn
+
+
 ```bash
-sudo env "PATH=$PATH" KUBECONFIG=$HOME/.kube/config nohup kubectl port-forward -n longhorn-system svc/longhorn-frontend --address 0.0.0.0 8080:80 > ~/longhorn-frontend.log 2>&1 &
+sudo env "PATH=$PATH" KUBECONFIG=$HOME/.kube/config \
+nohup kubectl port-forward -n longhorn-system svc/longhorn-frontend --address 0.0.0.0 8081:80 > ~/longhorn-frontend.log 2>&1 &
 ```
+
+
+
+```bash
+kubectl -n longhorn-system patch svc longhorn-frontend \
+  -p '{"spec": {"type": "NodePort", "ports": [{"port": 80, "targetPort": 80, "nodePort": 32001}]}}'
+```
+
 
 #### Verificar Recursos Desplegados
 ```bash
