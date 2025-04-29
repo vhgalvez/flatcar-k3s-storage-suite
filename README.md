@@ -41,6 +41,7 @@ Confirme que los nodos estén correctamente agrupados:
 
 ```bash
 sudo ansible-playbook -i inventory/hosts.ini install_longhorn.yml
+```
 
 Este playbook ejecuta:
 
@@ -51,9 +52,11 @@ Este playbook ejecuta:
 - **Habilitación del servicio.**
 
 ### 4. Validar Configuración de Discos Montados
+
 ```bash
 df -h
 ```
+
 Verifique:
 - `/srv/nfs/postgresql`
 - `/srv/nfs/shared`
