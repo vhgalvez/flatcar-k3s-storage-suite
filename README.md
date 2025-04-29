@@ -177,6 +177,9 @@ kubectl -n longhorn-system patch svc longhorn-frontend \
 ```
 
 
+192.168.0.15:32003
+
+
 #### Verificar Recursos Desplegados
 ```bash
 kubectl get all -n longhorn-system
