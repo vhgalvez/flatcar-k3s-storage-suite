@@ -172,8 +172,7 @@ nohup kubectl port-forward -n longhorn-system svc/longhorn-frontend --address 0.
 
 
 ```bash
-kubectl -n longhorn-system patch svc longhorn-frontend \
-  -p '{"spec": {"ports": [{"port": 80, "targetPort": 8000, "nodePort": 32003}]}}'
+nohup kubectl port-forward -n longhorn-system svc/longhorn-frontend --address 0.0.0.0 32003:80 > /tmp/longhorn-port-forward.log 2>&1 &
 ```
 
 
