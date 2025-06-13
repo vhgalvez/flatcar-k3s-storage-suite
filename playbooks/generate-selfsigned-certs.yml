@@ -1,9 +1,3 @@
-# playbooks/1-generate-selfsigned-certs.yml
-# ============================================================
-# 🛡️ FASE 1A: Generar certificados wildcard autofirmados
-# - Se crean en ./files/certs/
-# - Se copian automáticamente a /etc/traefik/certs en master1
-# ============================================================
 
 - name: 🛡️ Generar certificados wildcard autofirmados para Traefik
   hosts: localhost
