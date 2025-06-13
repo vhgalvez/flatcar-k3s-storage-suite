@@ -1,0 +1,46 @@
+# playbooks\expose_longhorn_dashboard.yml
+---
+- name: 🚪 Exponer Longhorn Dashboard con IngressRoute Interno
+  hosts: controller
+  become: true
+  gather_facts: false
+
+  vars:
+    longhorn_namespace: longhorn-system
+    dashboard_auth_secret: longhorn-dashboard-auth-secret
+    domain: longhorn.socialdevs.site
+    kubeconfig_path: "/home/victory/.kube/config"
+    kubectl_bin: "/usr/local/bin/kubectl"
+
+  tasks:
+    - name: 🔐 Crear secreto básico de autenticación (admin/SuperPassword123)
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        {{ kubectl_bin }} -n {{ longhorn_namespace }} create secret generic {{ dashboard_auth_secret }} \
+          --from-literal=users=admin:$(htpasswd -nbBC 10 admin SuperPassword123 | tr -d '\n') \
+          --type=kubernetes.io/basic-auth
+      args:
+        executable: /bin/bash
+      register: auth_secret
+      failed_when: false
+      changed_when: "'created' in auth_secret.stdout"
+
+    - name: 📁 Renderizar middleware de autenticación
+      template:
+        src: templates/longhorn-dashboard-auth-middleware.yaml.j2
+        dest: /tmp/longhorn-dashboard-auth-middleware.yaml
+
+    - name: 📁 Renderizar IngressRoute de Longhorn
+      template:
+        src: templates/longhorn-dashboard-ingressroute.yaml.j2
+        dest: /tmp/longhorn-dashboard-ingressroute.yaml
+
+    - name: 🚀 Aplicar Middleware
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        {{ kubectl_bin }} apply -f /tmp/longhorn-dashboard-auth-middleware.yaml
+
+    - name: 🚀 Aplicar IngressRoute
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        {{ kubectl_bin }} apply -f /tmp/longhorn-dashboard-ingressroute.yaml
