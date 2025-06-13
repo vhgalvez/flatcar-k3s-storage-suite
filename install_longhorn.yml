@@ -1,17 +1,18 @@
-# site.yml
+# install_longhorn.yml
 ---
+# 📦 Instalación completa y ordenada del stack de almacenamiento Longhorn
 
-- name: 🔐 1 - Generar token JWT en master con permisos correctos
-  import_playbook: playbooks/01_generate_token.yml
+- name: 📀 1 - Preparar discos en nodo de almacenamiento y workers
+  import_playbook: playbooks/01_prepare-disks.yml
 
-- name: 🔧 2 - Preparar nodo controlador (kubectl + helm)
-  import_playbook: playbooks/02_prepare_controller.yml
+- name: 🚀 2 - Desplegar Longhorn desde el nodo controlador
+  import_playbook: playbooks/02_deploy-longhorn.yml
 
-- name: 🔑 2.1 - Configurar acceso del controlador al clúster (kubeconfig + token)
-  import_playbook: playbooks/configure_k8s_access.yml
+- name: 🔐 3 - Generar certificados autofirmados para Ingress interno
+  import_playbook: playbooks/03_generate-selfsigned-certs.yml
 
-- name: 📀 3 - Preparar almacenamiento en nodo storage y workers
-  import_playbook: playbooks/03_prepare_storage-workers.yml
+- name: 🔑 4 - Generar y cifrar Secret con autenticación básica
+  import_playbook: playbooks/04_generate-auth-secret.yml
 
-- name: 🚀 4 - Desplegar Longhorn desde controller
-  import_playbook: playbooks/04_deploy_longhorn.yml
+- name: 🌐 5 - Crear IngressRoute interno para Longhorn Dashboard
+  import_playbook: playbooks/05_ingress-longhorn-internal.yml
