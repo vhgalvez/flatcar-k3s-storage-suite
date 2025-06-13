@@ -229,3 +229,41 @@ Este conjunto de playbooks garantiza una configuración de almacenamiento automa
 ## 📜 Licencia
 
 Este proyecto está licenciado bajo la **Licencia MIT**. Consulte el archivo [LICENSE](LICENSE) para más detalles.
+
+
+flatcar-k3s-storage-suite/
+├── ansible.cfg
+├── inventory/
+│   └── hosts.ini
+├── group_vars/
+│   └── all.yml
+├── vars/
+│   └── main.yml
+├── playbooks/
+│   ├── 01_prepare-disks.yml                # Prepara discos: storage y workers
+│   ├── 02_deploy-longhorn.yml              # Helm install de Longhorn
+│   ├── 03_generate-selfsigned-certs.yml    # Certificados autofirmados
+│   ├── 04_generate-auth-secret.yml         # Autenticación básica
+│   ├── 05_ingress-longhorn-internal.yml    # IngressRoute + middleware
+│   ├── 99_cleanup-longhorn.yml             # Limpieza completa
+│
+│   └── templates/
+│       ├── longhorn/
+│       │   ├── values.yaml.j2
+│       │   ├── ingressroute-internal.yaml.j2
+│       │   └── middleware-auth.yaml.j2
+│       └── secrets/
+│           └── basic-auth-secret.yaml.j2
+│
+├── files/                                  # Secretos cifrados, artefactos generados
+│   ├── longhorn-auth-secret.yaml
+│   └── longhorn-auth-secret-sealed.yaml
+│
+├── image/
+│   └── *.png
+├── doc/
+│   ├── doc.md
+│   └── nfs_exports_config.md
+├── install_longhorn.yml                    # (Obsoleto, reemplazado por 01-05)
+├── LICENSE
+└── README.md
