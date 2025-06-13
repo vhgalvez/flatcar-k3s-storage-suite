@@ -32,8 +32,8 @@
 
     - name: 📁 Renderizar IngressRoute de Longhorn
       template:
-        src: templates/longhorn-dashboard-ingressroute.yaml.j2
-        dest: /tmp/longhorn-dashboard-ingressroute.yaml
+        src: templates/longhorn-dashboard-ingressroute-internal.yaml.j2
+        dest: /tmp/longhorn-dashboard-ingressroute-internal.yaml
 
     - name: 🚀 Aplicar Middleware
       shell: |
@@ -43,4 +43,4 @@
     - name: 🚀 Aplicar IngressRoute
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        {{ kubectl_bin }} apply -f /tmp/longhorn-dashboard-ingressroute.yaml
+        {{ kubectl_bin }} apply -f /tmp/longhorn-dashboard-ingressroute-internal.yaml
