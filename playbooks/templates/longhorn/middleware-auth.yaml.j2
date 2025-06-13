@@ -2,8 +2,8 @@
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: longhorn-dashboard-auth-middleware
-  namespace: longhorn-system
+  name: longhorn-dashboard-auth
+  namespace: {{ namespace }}
 spec:
   basicAuth:
-    secret: longhorn-dashboard-auth-secret
+    secret: {{ secret_name }}
