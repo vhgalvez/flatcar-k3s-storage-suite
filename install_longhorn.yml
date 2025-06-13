@@ -1,18 +1,18 @@
 # install_longhorn.yml
 ---
-# 📦 Instalación completa y ordenada del stack de almacenamiento Longhorn
+# 📦 Instalación completa de Longhorn con seguridad y exposición interna
 
-- name: 📀 1 - Preparar discos en nodo de almacenamiento y workers
+- name: 📀 1 - Preparar discos en nodos de almacenamiento y workers
   import_playbook: playbooks/01_prepare-disks.yml
 
 - name: 🚀 2 - Desplegar Longhorn desde el nodo controlador
   import_playbook: playbooks/02_deploy-longhorn.yml
 
-- name: 🔐 3 - Generar certificados autofirmados para Ingress interno
+- name: 🔐 3 - Generar certificados autofirmados para acceso seguro
   import_playbook: playbooks/03_generate-selfsigned-certs.yml
 
-- name: 🔑 4 - Generar y cifrar Secret con autenticación básica
+- name: 🔑 4 - Generar y sellar Secret con autenticación básica
   import_playbook: playbooks/04_generate-auth-secret.yml
 
-- name: 🌐 5 - Crear IngressRoute interno para Longhorn Dashboard
+- name: 🌐 5 - Crear IngressRoute interno para el dashboard de Longhorn
   import_playbook: playbooks/05_ingress-longhorn-internal.yml

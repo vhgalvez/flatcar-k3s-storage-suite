@@ -1,5 +1,6 @@
+# playbooks/03_generate-selfsigned-certs.yml
 ---
-- name: 📜 Generar certificado autofirmado TLS para dominio interno Longhorn
+- name: 📜 3 - Generar certificado TLS autofirmado para dominio interno de Longhorn
   hosts: controller
   become: true
   gather_facts: false
@@ -13,6 +14,7 @@
     openssl_bin: "/usr/bin/openssl"
 
   tasks:
+
     - name: 📁 Crear carpeta temporal para certificados
       file:
         path: "{{ cert_dir }}"
@@ -20,24 +22,31 @@
         mode: '0755'
 
     - name: 🔐 Generar clave privada
-      command: "{{ openssl_bin }} genrsa -out {{ cert_dir }}/tls.key 2048"
+      command: >
+        {{ openssl_bin }} genrsa -out {{ cert_dir }}/tls.key 2048
+      args:
+        creates: "{{ cert_dir }}/tls.key"
 
-    - name: 🧾 Generar CSR autofirmado
+    - name: 🧾 Generar certificado autofirmado para {{ domain_name }}
       command: >
         {{ openssl_bin }} req -x509 -nodes -days 3650
         -subj "/CN={{ domain_name }}"
         -newkey rsa:2048
         -keyout {{ cert_dir }}/tls.key
         -out {{ cert_dir }}/tls.crt
+      args:
+        creates: "{{ cert_dir }}/tls.crt"
 
-    - name: 📦 Crear secret TLS en Kubernetes
+    - name: 🔐 Crear o actualizar secret TLS en Kubernetes
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
         kubectl -n {{ tls_namespace }} create secret tls {{ tls_secret_name }} \
-          --cert={{ cert_dir }}/tls.crt --key={{ cert_dir }}/tls.key \
+          --cert={{ cert_dir }}/tls.crt \
+          --key={{ cert_dir }}/tls.key \
           --dry-run=client -o yaml | kubectl apply -f -
       register: secret_result
+      changed_when: "'created' in secret_result.stdout or 'configured' in secret_result.stdout"
 
-    - name: ✅ Mostrar resultado
+    - name: ✅ Resultado del secret TLS
       debug:
         var: secret_result.stdout_lines

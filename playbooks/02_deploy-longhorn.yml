@@ -1,6 +1,6 @@
-# playbooks\04_deploy_longhorn.yml
+# playbooks/02_deploy-longhorn.yml
 ---
-- name: 🚀 4 - Instalar Longhorn desde el nodo controller
+- name: 🚀 2 - Instalar Longhorn desde el nodo controller
   hosts: controller
   become: true
   gather_facts: false
@@ -20,7 +20,7 @@
       failed_when: ns_create.rc != 0 and 'AlreadyExists' not in ns_create.stderr
       changed_when: "'created' in ns_create.stdout"
 
-    - name: ⚠️ Verificar si el namespace tiene recursos
+    - name: ⚠️ Verificar si el namespace tiene recursos existentes
       command: >
         {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get all -n {{ longhorn_namespace }}
       register: longhorn_check
@@ -30,8 +30,8 @@
     - name: ❌ Abortamos si el namespace '{{ longhorn_namespace }}' tiene recursos
       fail:
         msg: |
-          ⚠️ El namespace '{{ longhorn_namespace }}' contiene recursos de una instalación anterior.
-          🧹 Para limpiar y reinstalar ejecuta:
+          ⚠️ El namespace '{{ longhorn_namespace }}' ya contiene recursos de una instalación anterior.
+          🧹 Limpia primero ejecutando:
             ansible-playbook playbooks/cleanup_longhorn.yml -i inventory/hosts.ini -e "confirm_cleanup=yes"
           Recursos detectados:
           {{ longhorn_check.stdout | default('') }}
@@ -41,10 +41,9 @@
         - "'No resources found' not in longhorn_check.stdout"
 
   tasks:
-
-    - name: 📝 Copiar valores personalizados de Longhorn (NodePort 32003)
+    - name: 📝 Copiar valores personalizados de Longhorn (UI en NodePort 32003)
       template:
-        src: templates/longhorn_values.yaml.j2
+        src: templates/longhorn/values.yaml.j2
         dest: /tmp/longhorn_values.yaml
         mode: '0644'
 
@@ -55,14 +54,13 @@
       failed_when: false
       changed_when: "'already exists' not in helm_repo_add.stdout"
 
-    - name: 🔄 Actualizar repositorio Helm
+    - name: 🔄 Actualizar repositorios Helm
       command: >
         {{ helm_bin }} repo update
 
-    - name: 🚀 Instalar o actualizar Longhorn con Helm (UI en NodePort 32003)
+    - name: 🚀 Instalar o actualizar Longhorn con Helm
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        echo "🔧 Instalando o actualizando Longhorn (UI en NodePort 32003)..."
         {{ helm_bin }} upgrade --install {{ longhorn_release }} longhorn/longhorn \
           --namespace {{ longhorn_namespace }} \
           --create-namespace \
@@ -72,15 +70,7 @@
       failed_when: longhorn_install.rc != 0
       changed_when: true
 
-    - name: 🔍 Verificar si el release tiene recursos tras instalación
-      shell: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        {{ helm_bin }} get all {{ longhorn_release }} -n {{ longhorn_namespace }} || exit 1
-      register: helm_get_result
-      failed_when: helm_get_result.rc != 0 or 'MANIFEST' not in helm_get_result.stdout
-      changed_when: false
-
-    - name: ⏳ Esperar a que Longhorn cree al menos un pod (máx 120s)
+    - name: ⏳ Verificar existencia de pods en '{{ longhorn_namespace }}'
       shell: |
         for i in {1..24}; do
           {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get pods -n {{ longhorn_namespace }} --no-headers 2>/dev/null | grep -qv '^$' && exit 0
@@ -93,7 +83,7 @@
       failed_when: pod_exist_check.rc != 0
       changed_when: false
 
-    - name: ⏳ Esperar a que los pods estén listos (máx 5 minutos)
+    - name: ⏳ Esperar que todos los pods estén listos (timeout 5 min)
       shell: >
         {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} wait --for=condition=Ready pod -n {{ longhorn_namespace }} --all --timeout=300s
       register: pod_ready
@@ -111,6 +101,6 @@
         {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get pv
       register: volumes_info
 
-    - name: ✅ Resultado del despliegue
+    - name: ✅ Resultado final del despliegue
       debug:
         var: volumes_info.stdout_lines
