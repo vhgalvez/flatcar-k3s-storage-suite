@@ -1,0 +1,123 @@
+# playbooks/1-generate-selfsigned-certs.yml
+# ============================================================
+# 🛡️ FASE 1A: Generar certificados wildcard autofirmados
+# - Se crean en ./files/certs/
+# - Se copian automáticamente a /etc/traefik/certs en master1
+# ============================================================
+
+- name: 🛡️ Generar certificados wildcard autofirmados para Traefik
+  hosts: localhost
+  become: true
+
+  vars_files:
+    - ../vars/main.yml
+
+  vars:
+    certs_dir: "./files/certs"
+    cert_name: "traefik"
+    country: "ES"
+    state: "Madrid"
+    locality: "Madrid"
+    organization: "FlatcarMicroCloud"
+    common_name: "*.socialdevs.site"
+    san_file: "/tmp/san.cnf"
+    force_recreate: false
+    ssh_key_path: "/root/.ssh/cluster_k3s/shared/id_rsa_shared_cluster"
+
+  tasks:
+    - name: 📁 Crear directorio de certificados local
+      file:
+        path: "{{ certs_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: 📋 Verificar existencia de certificado
+      stat:
+        path: "{{ certs_dir }}/{{ cert_name }}.crt"
+      register: cert_stat
+
+    - name: 📋 Verificar existencia de clave privada
+      stat:
+        path: "{{ certs_dir }}/{{ cert_name }}.key"
+      register: key_stat
+
+    - name: 📝 Crear archivo SAN temporal
+      copy:
+        dest: "{{ san_file }}"
+        content: |
+          [req]
+          default_bits       = 4096
+          prompt             = no
+          default_md         = sha256
+          req_extensions     = req_ext
+          distinguished_name = dn
+
+          [dn]
+          C={{ country }}
+          ST={{ state }}
+          L={{ locality }}
+          O={{ organization }}
+          CN={{ common_name }}
+
+          [req_ext]
+          subjectAltName = @alt_names
+
+          [alt_names]
+          DNS.1 = *.socialdevs.site
+          DNS.2 = socialdevs.site
+          DNS.3 = jenkins.socialdevs.site
+          DNS.4 = grafana.socialdevs.site
+          DNS.5 = argocd.socialdevs.site
+          DNS.6 = prometheus.socialdevs.site
+
+    - name: 🔐 Generar clave privada
+      command: openssl genrsa -out {{ certs_dir }}/{{ cert_name }}.key 4096
+      when: force_recreate or not key_stat.stat.exists
+
+    - name: 📜 Generar certificado wildcard autofirmado
+      command: >
+        openssl req -x509 -nodes -days 3650
+        -key {{ certs_dir }}/{{ cert_name }}.key
+        -out {{ certs_dir }}/{{ cert_name }}.crt
+        -config {{ san_file }}
+        -extensions req_ext
+      when: force_recreate or not cert_stat.stat.exists
+
+    - name: 🔐 Establecer permisos locales
+      file:
+        path: "{{ item.path }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "{{ certs_dir }}/{{ cert_name }}.crt", mode: "0644" }
+        - { path: "{{ certs_dir }}/{{ cert_name }}.key", mode: "0600" }
+
+    - name: 🧹 Eliminar archivo temporal SAN
+      file:
+        path: "{{ san_file }}"
+        state: absent
+
+    - name: 📁 Crear directorio remoto /etc/traefik/certs en master1
+      ansible.builtin.raw: mkdir -p /etc/traefik/certs && chmod 755 /etc/traefik/certs
+      delegate_to: "{{ master1_ip }}"
+      become: true
+
+    - name: 📤 Copiar traefik.crt a master1
+      ansible.builtin.shell: >
+        scp -i {{ ssh_key_path }} -o StrictHostKeyChecking=no
+        {{ certs_dir }}/{{ cert_name }}.crt
+        root@{{ master1_ip }}:/etc/traefik/certs/{{ cert_name }}.crt
+      delegate_to: localhost
+
+    - name: 📤 Copiar traefik.key a master1
+      ansible.builtin.shell: >
+        scp -i {{ ssh_key_path }} -o StrictHostKeyChecking=no
+        {{ certs_dir }}/{{ cert_name }}.key
+        root@{{ master1_ip }}:/etc/traefik/certs/{{ cert_name }}.key
+      delegate_to: localhost
+
+    - name: 🔐 Establecer permisos remotos en master1
+      ansible.builtin.raw: |
+        chmod 0644 /etc/traefik/certs/{{ cert_name }}.crt
+        chmod 0600 /etc/traefik/certs/{{ cert_name }}.key
+      delegate_to: "{{ master1_ip }}"
+      become: true
