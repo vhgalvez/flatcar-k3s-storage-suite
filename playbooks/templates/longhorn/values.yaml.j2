@@ -1,5 +1,4 @@
 # playbooks\templates\longhorn_values.yaml.j2
 service:
   ui:
-    type: NodePort
-    nodePort: 32003  # Puerto fijo para acceso desde LAN
+    type: ClusterIP
