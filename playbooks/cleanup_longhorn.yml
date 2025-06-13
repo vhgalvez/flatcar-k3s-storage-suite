@@ -1,7 +1,7 @@
 # playbooks/cleanup_longhorn.yml
 ---
-- name: 🛑 1 - Preparación para la limpieza de Longhorn
-  hosts: controller
+- name: 💚 1 - Preparación para la limpieza de Longhorn
+  hosts: localhost
   become: true
   gather_facts: false
 
@@ -13,7 +13,7 @@
     release_name: "longhorn"
 
   tasks:
-    - name: 🧪 Instalar jq si no está presente
+    - name: 🥪 Instalar jq si no está presente
       package:
         name: jq
         state: present
@@ -43,7 +43,7 @@
       ignore_errors: true
 
 - name: 💣 4 - Eliminar CRDs Longhorn forzadamente
-  hosts: controller
+  hosts: localhost
   become: true
   gather_facts: false
 
@@ -57,32 +57,21 @@
         export PATH=$PATH:/usr/local/bin
         export KUBECONFIG={{ kubeconfig_path }}
         echo "🧹 Iniciando eliminación de CRDs de Longhorn..."
-        max_retries=3
-        for crd in $(kubectl get crd -o name --kubeconfig {{ kubeconfig_path }} | grep 'longhorn.io'); do
+        for crd in $(kubectl get crd -o name | grep 'longhorn.io'); do
           name=$(basename "$crd")
           echo "🔧 Procesando CRD: $name"
-          for i in $(seq 1 $max_retries); do
-            # Quitar finalizers
-            {{ kubectl_bin }} patch crd "$name" -p '{"metadata":{"finalizers":[]}}' --type=merge --kubeconfig {{ kubeconfig_path }} && break || sleep 5
-          done
-          # Eliminar CRD
-          {{ kubectl_bin }} delete crd "$name" --grace-period=0 --force --kubeconfig {{ kubeconfig_path }} || true
+          {{ kubectl_bin }} patch crd "$name" -p '{"metadata":{"finalizers":[]}}' --type=merge || true
+          {{ kubectl_bin }} delete crd "$name" --grace-period=0 --force || true
           echo "✅ $name procesado."
         done
-        # Verificación final
-        remaining_crds=$({{ kubectl_bin }} get crd --kubeconfig {{ kubeconfig_path }} | grep 'longhorn.io' || echo "✅ No hay CRDs restantes")
-        if [[ "$remaining_crds" != "✅ No hay CRDs restantes" ]]; then
-          echo "❌ CRDs restantes: $remaining_crds"
-          exit 1
-        fi
       register: crd_cleanup
-      failed_when: "'❌ CRDs restantes' in crd_cleanup.stdout"
+      failed_when: false
       changed_when: true
 
     - name: 🔍 Verificar si los CRDs de Longhorn fueron eliminados
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        crd_check=$(kubectl get crd --kubeconfig {{ kubeconfig_path }} | grep 'longhorn.io')
+        crd_check=$({{ kubectl_bin }} get crd | grep 'longhorn.io' || true)
         if [ -n "$crd_check" ]; then
           echo "⚠️ Los CRDs de Longhorn aún existen: $crd_check"
           exit 1
@@ -94,7 +83,7 @@
       changed_when: false
 
 - name: 🗑️ 5 - Eliminar el namespace Longhorn
-  hosts: controller
+  hosts: localhost
   become: true
   gather_facts: false
 
@@ -104,20 +93,11 @@
     namespace: "longhorn-system"
 
   tasks:
-    - name: 🧨 Verificar y eliminar finalizers del namespace si existen
+    - name: 💨 Verificar y eliminar finalizers del namespace si existen
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        if {{ kubectl_bin }} get namespace {{ namespace }} --kubeconfig {{ kubeconfig_path }} -o json | jq -e '.spec.finalizers | length > 0' > /dev/null; then
-          echo "⚠️ Se encontraron finalizers en el namespace '{{ namespace }}'. Intentando eliminarlos..."
-          kubectl patch namespace {{ namespace }} --kubeconfig {{ kubeconfig_path }} -p '{"metadata":{"finalizers":[]}}' --type=merge
-          sleep 5
-          if {{ kubectl_bin }} get namespace {{ namespace }} --kubeconfig {{ kubeconfig_path }} -o json | jq -e '.spec.finalizers | length > 0' > /dev/null; then
-            echo "⚠️ Los finalizers del namespace aún persisten."
-          else
-            echo "✅ Finalizers del namespace eliminados."
-          fi
-        else
-          echo "✅ El namespace '{{ namespace }}' no tiene finalizers."
+        if {{ kubectl_bin }} get namespace {{ namespace }} -o json | jq -e '.spec.finalizers | length > 0' > /dev/null; then
+          kubectl patch namespace {{ namespace }} -p '{"metadata":{"finalizers":[]}}' --type=merge
         fi
       changed_when: true
       failed_when: false
@@ -125,47 +105,21 @@
     - name: ❌ Eliminar el namespace completamente (con espera activa)
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
-        echo "💣 Intentando eliminar el namespace '{{ namespace }}'..."
-        {{ kubectl_bin }} delete namespace {{ namespace }} --kubeconfig {{ kubeconfig_path }} --grace-period=0 --force --ignore-not-found
+        {{ kubectl_bin }} delete namespace {{ namespace }} --grace-period=0 --force --ignore-not-found
         for i in $(seq 1 30); do
           sleep 2
-          if ! {{ kubectl_bin }} get namespace {{ namespace }} --kubeconfig {{ kubeconfig_path }} &>/dev/null; then
+          if ! {{ kubectl_bin }} get namespace {{ namespace }} &>/dev/null; then
             echo "✅ Namespace '{{ namespace }}' eliminado."
             exit 0
           fi
         done
-        echo "⚠️ El namespace '{{ namespace }}' sigue existiendo después de 60 segundos. Puede haber un problema."
+        echo "⚠️ El namespace '{{ namespace }}' sigue existiendo."
         exit 1
       register: ns_delete_result
       failed_when: ns_delete_result.rc != 0
       changed_when: true
 
-    - name: 🚨 Forzar eliminación final si aún existe (método alternativo)
-      shell: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        if {{ kubectl_bin }} get namespace {{ namespace }} --kubeconfig {{ kubeconfig_path }} &>/dev/null; then
-          echo "🚨 Intentando forzar la eliminación del namespace '{{ namespace }}' por método alternativo..."
-          kubectl get namespace {{ namespace }} --kubeconfig {{ kubeconfig_path }} -o json | jq 'del(.spec.finalizers)' > /tmp/ns-force.json
-          kubectl replace --raw "/api/v1/namespaces/{{ namespace }}/finalize" -f /tmp/ns-force.json --force --grace-period=0 --kubeconfig {{ kubeconfig_path }} || true
-          rm -f /tmp/ns-force.json
-          sleep 5
-          {{ kubectl_bin }} delete namespace {{ namespace }} --force --grace-period=0 --ignore-not-found --kubeconfig {{ kubeconfig_path }} || true
-          echo "✅ Intento de eliminación forzada completado."
-        else
-          echo "✅ El namespace ya no existe."
-        fi
-      changed_when: true
-      failed_when: false
-
-    - name: 🧾 Mostrar resumen de limpieza del namespace
-      debug:
-        var: ns_delete_result
-
-    - name: 🧾 Mostrar resumen de limpieza del namespace
-      debug:
-        var: ns_delete_result
-
-- name: 💽 6 - Limpiar completamente /dev/vdb en storage y workers
+- name: 📍 6 - Limpiar completamente /dev/vdb en storage y workers
   hosts: storage,workers
   become: true
   gather_facts: false
@@ -177,13 +131,12 @@
 
     - name: 💣 Desmontar volúmenes
       raw: |
-        umount -f /mnt/longhorn-disk 2>/dev/null || true
-        umount -f /srv/nfs/postgresql 2>/dev/null || true
-        umount -f /srv/nfs/shared 2>/dev/null || true
-        sleep 2
+        umount -f /mnt/longhorn-disk || true
+        umount -f /srv/nfs/postgresql || true
+        umount -f /srv/nfs/shared || true
       ignore_errors: true
 
-    - name: ⏳ Esperar a que /dev/vdb ya no esté montado
+    - name: ⏳ Esperar desmontaje de /dev/vdb
       raw: |
         for i in $(seq 1 5); do
           mount | grep -q vdb || exit 0
@@ -194,29 +147,28 @@
       failed_when: umount_check.rc != 0
       changed_when: false
 
-    - name: ❌ Detener servicios que puedan bloquear el disco (solo en storage)
+    - name: ❌ Detener servicios (solo en storage)
       raw: |
         systemctl stop nfs-server || true
         systemctl stop iscsid || true
       when: "'storage' in group_names"
 
-    - name: 🧹 Eliminar volúmenes LVM (si existen)
+    - name: 🧹 Eliminar volúmenes LVM
       raw: |
-        lvremove -f /dev/vg_storage/postgres_lv 2>/dev/null || true
-        lvremove -f /dev/vg_storage/shared_lv 2>/dev/null || true
-        lvremove -f /dev/vg_storage/longhorn_lv 2>/dev/null || true
-        sleep 1
+        lvremove -f /dev/vg_storage/postgres_lv || true
+        lvremove -f /dev/vg_storage/shared_lv || true
+        lvremove -f /dev/vg_storage/longhorn_lv || true
 
-    - name: 🧱 Eliminar grupo de volúmenes
-      raw: vgremove -f vg_storage 2>/dev/null || true
+    - name: 🔷 Eliminar grupo de volúmenes
+      raw: vgremove -f vg_storage || true
 
-    - name: 💽 Eliminar volumen físico
-      raw: pvremove -f /dev/vdb1 2>/dev/null || true
+    - name: 🖽 Eliminar volumen físico
+      raw: pvremove -f /dev/vdb1 || true
 
-    - name: ❎ Eliminar partición y limpiar firmas
+    - name: ❌ Eliminar particiones y limpiar firmas
       raw: |
-        parted -s /dev/vdb rm 1 2>/dev/null || true
-        wipefs -a /dev/vdb 2>/dev/null || true
+        parted -s /dev/vdb rm 1 || true
+        wipefs -a /dev/vdb || true
 
-    - name: 🧼 Esperar a que el sistema asiente los cambios
+    - name: 🧼 Esperar asentamiento del sistema
       raw: udevadm settle

@@ -1,7 +1,7 @@
 # playbooks/03_generate-selfsigned-certs.yml
 ---
 - name: 📜 3 - Generar certificado TLS autofirmado para dominio interno de Longhorn
-  hosts: controller
+  hosts: localhost
   become: true
   gather_facts: false
 

@@ -1,7 +1,7 @@
 # playbooks/02_deploy-longhorn.yml
 ---
-- name: 🚀 2 - Instalar Longhorn desde el nodo controller
-  hosts: controller
+- name: 🚀 2 - Instalar Longhorn desde el nodo localhost
+  hosts: localhost
   become: true
   gather_facts: false
 
