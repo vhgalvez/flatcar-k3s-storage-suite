@@ -1,56 +1,96 @@
 # playbooks/05_ingress-longhorn-internal.yml
 ---
-- name: 🚪 5 - Exponer Longhorn Dashboard con IngressRoute Interno
+- name: 🚪 5 - Exponer Longhorn Dashboard con IngressRoute Interno y Autenticación
   hosts: localhost
-  become: true
+  become: false
   gather_facts: false
 
   vars:
-    longhorn_namespace: longhorn-system
-    dashboard_auth_secret: longhorn-dashboard-auth
-    domain: longhorn.socialdevs.site
     kubeconfig_path: "/home/victory/.kube/config"
-    kubectl_bin: "/usr/local/bin/kubectl"
+    kubeseal_path: "/usr/local/bin/kubeseal"
+    kubectl_path: "/usr/local/bin/kubectl"
+    python_bin: "/usr/bin/python3"
+    files_dir: "{{ playbook_dir }}/files"
+    rendered_secret_path: "{{ files_dir }}/longhorn-dashboard-secret.yaml"
+    sealed_secret_path: "{{ files_dir }}/longhorn-dashboard-sealed.yaml"
+    longhorn_namespace: "longhorn-system"
+    secret_name: "longhorn-dashboard-auth"
+    middleware_name: "longhorn-dashboard-auth"
+    domain: "longhorn.socialdevs.site"
+    longhorn_auth_user: "admin"
+    longhorn_auth_pass: "SuperPassword123"
 
   tasks:
+    - name: 📁 Crear directorio local para secrets (si no existe)
+      file:
+        path: "{{ files_dir }}"
+        state: directory
+        mode: "0755"
 
-    - name: ⚠️ Verificar si ya existe el Secret de autenticación
-      shell: |
-        KUBECONFIG={{ kubeconfig_path }} {{ kubectl_bin }} get secret {{ dashboard_auth_secret }} -n {{ longhorn_namespace }} --ignore-not-found
-      register: auth_secret_check
-      changed_when: false
+    - name: 🔐 Generar hash htpasswd (basicAuth con MD5)
+      command: >
+        {{ python_bin }} -c "import crypt; print('{{ longhorn_auth_user }}:' + crypt.crypt('{{ longhorn_auth_pass }}', crypt.mksalt(crypt.METHOD_MD5)))"
+      register: longhorn_htpasswd_output
+      changed_when: true
+      failed_when: longhorn_htpasswd_output.rc != 0 or longhorn_htpasswd_output.stdout == ""
 
-    - name: ❌ Abortamos si ya existe un Secret con ese nombre
-      fail:
-        msg: |
-          ⚠️ El Secret '{{ dashboard_auth_secret }}' ya existe en el namespace '{{ longhorn_namespace }}'.
-          Si deseas regenerarlo, primero elimínalo manualmente con:
-            {{ kubectl_bin }} delete secret {{ dashboard_auth_secret }} -n {{ longhorn_namespace }}
-      when: auth_secret_check.stdout is search("Name:.*{{ dashboard_auth_secret }}")
-
-    - name: 📁 Renderizar Middleware de autenticación
+    - name: 📄 Renderizar plantilla del Secret plano (YAML)
       template:
-        src: templates/longhorn/middleware-auth.yaml.j2
-        dest: /tmp/longhorn-middleware-auth.yaml
+        src: templates/secrets/basic-auth-secret.yaml.j2
+        dest: "{{ rendered_secret_path }}"
       vars:
-        secret_name: "{{ dashboard_auth_secret }}"
+        basic_auth: "{{ longhorn_htpasswd_output.stdout }}"
+        secret_name: "{{ secret_name }}"
         namespace: "{{ longhorn_namespace }}"
 
-    - name: 📁 Renderizar IngressRoute interno de Longhorn
+    - name: 🔐 Cifrar el Secret con kubeseal (SealedSecret)
+      shell: >
+        {{ kubeseal_path }}
+        --controller-name sealed-secrets-controller
+        --controller-namespace {{ longhorn_namespace }}
+        --format yaml
+        < "{{ rendered_secret_path }}" > "{{ sealed_secret_path }}"
+      args:
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      register: seal_output
+      failed_when: seal_output.rc != 0
+
+    - name: 🚀 Aplicar el SealedSecret al clúster
+      shell: >
+        {{ kubectl_path }} apply -f "{{ sealed_secret_path }}"
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      register: apply_output
+      changed_when: "'created' in apply_output.stdout or 'configured' in apply_output.stdout"
+      failed_when: apply_output.rc != 0
+
+    - name: 📄 Renderizar Middleware de autenticación
       template:
-        src: templates/longhorn/ingressroute-internal.yaml.j2
-        dest: /tmp/longhorn-ingressroute-internal.yaml
+        src: templates/longhorn-dashboard-auth-middleware.yaml.j2
+        dest: /tmp/longhorn-dashboard-auth-middleware.yaml
+      vars:
+        secret_name: "{{ secret_name }}"
+        namespace: "{{ longhorn_namespace }}"
+
+    - name: 📄 Renderizar IngressRoute para el Dashboard
+      template:
+        src: templates/longhorn-dashboard-ingressroute-internal.yaml.j2
+        dest: /tmp/longhorn-dashboard-ingressroute-internal.yaml
       vars:
         domain: "{{ domain }}"
-        middleware_name: "{{ dashboard_auth_secret }}"
+        middleware_name: "{{ middleware_name }}"
         namespace: "{{ longhorn_namespace }}"
 
     - name: 🚀 Aplicar Middleware (auth)
       shell: |
-        KUBECONFIG={{ kubeconfig_path }} {{ kubectl_bin }} apply -f /tmp/longhorn-middleware-auth.yaml
-      changed_when: true
+        {{ kubectl_path }} apply -f /tmp/longhorn-dashboard-auth-middleware.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
 
-    - name: 🚀 Aplicar IngressRoute (Interno)
+    - name: 🚀 Aplicar IngressRoute
       shell: |
-        KUBECONFIG={{ kubeconfig_path }} {{ kubectl_bin }} apply -f /tmp/longhorn-ingressroute-internal.yaml
-      changed_when: true
+        {{ kubectl_path }} apply -f /tmp/longhorn-dashboard-ingressroute-internal.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
