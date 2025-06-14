@@ -1,4 +1,3 @@
-
 # vars/main.yml
 longhorn_auth_user: admin
-longhorn_auth_pass: SuperPassword123
+longhorn_auth_pass: SuperSecure456
