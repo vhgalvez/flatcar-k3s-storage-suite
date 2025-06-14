@@ -12,8 +12,29 @@
     domain_name: "longhorn.socialdevs.site"
     kubeconfig_path: "/home/victory/.kube/config"
     openssl_bin: "/usr/bin/openssl"
+    kubectl_bin: "/usr/local/bin/kubectl"
 
   tasks:
+
+    - name: ✅ Verificar que openssl está instalado
+      stat:
+        path: "{{ openssl_bin }}"
+      register: openssl_check
+
+    - name: ❌ Error si openssl no está instalado
+      fail:
+        msg: "openssl no encontrado en {{ openssl_bin }}"
+      when: not openssl_check.stat.exists
+
+    - name: ✅ Verificar que kubectl está instalado
+      stat:
+        path: "{{ kubectl_bin }}"
+      register: kubectl_check
+
+    - name: ❌ Error si kubectl no está instalado
+      fail:
+        msg: "kubectl no encontrado en {{ kubectl_bin }}"
+      when: not kubectl_check.stat.exists
 
     - name: 📁 Crear carpeta temporal para certificados
       file:
@@ -39,13 +60,14 @@
 
     - name: 🔐 Crear o actualizar secret TLS en Kubernetes
       shell: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        kubectl -n {{ tls_namespace }} create secret tls {{ tls_secret_name }} \
+        KUBECONFIG={{ kubeconfig_path }} {{ kubectl_bin }} -n {{ tls_namespace }} create secret tls {{ tls_secret_name }} \
           --cert={{ cert_dir }}/tls.crt \
           --key={{ cert_dir }}/tls.key \
-          --dry-run=client -o yaml | kubectl apply -f -
+          --dry-run=client -o yaml | {{ kubectl_bin }} apply -f -
       register: secret_result
       changed_when: "'created' in secret_result.stdout or 'configured' in secret_result.stdout"
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
 
     - name: ✅ Resultado del secret TLS
       debug:

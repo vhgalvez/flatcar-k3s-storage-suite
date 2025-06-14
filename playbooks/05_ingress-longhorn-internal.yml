@@ -13,20 +13,20 @@
     kubectl_bin: "/usr/local/bin/kubectl"
 
   tasks:
+
     - name: ⚠️ Verificar si ya existe el Secret de autenticación
       shell: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        {{ kubectl_bin }} get secret {{ dashboard_auth_secret }} -n {{ longhorn_namespace }} --ignore-not-found
+        KUBECONFIG={{ kubeconfig_path }} {{ kubectl_bin }} get secret {{ dashboard_auth_secret }} -n {{ longhorn_namespace }} --ignore-not-found
       register: auth_secret_check
       changed_when: false
 
-    - name: ❌ Abortamos si ya existe un Secret con ese nombre (evitar sobrescritura)
+    - name: ❌ Abortamos si ya existe un Secret con ese nombre
       fail:
         msg: |
           ⚠️ El Secret '{{ dashboard_auth_secret }}' ya existe en el namespace '{{ longhorn_namespace }}'.
-          Si deseas regenerarlo, primero elimínalo manualmente:
+          Si deseas regenerarlo, primero elimínalo manualmente con:
             {{ kubectl_bin }} delete secret {{ dashboard_auth_secret }} -n {{ longhorn_namespace }}
-      when: auth_secret_check.stdout | length > 0
+      when: auth_secret_check.stdout is search("Name:.*{{ dashboard_auth_secret }}")
 
     - name: 📁 Renderizar Middleware de autenticación
       template:
@@ -42,15 +42,15 @@
         dest: /tmp/longhorn-ingressroute-internal.yaml
       vars:
         domain: "{{ domain }}"
-        middleware_name: "longhorn-dashboard-auth"
+        middleware_name: "{{ dashboard_auth_secret }}"
         namespace: "{{ longhorn_namespace }}"
 
     - name: 🚀 Aplicar Middleware (auth)
       shell: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        {{ kubectl_bin }} apply -f /tmp/longhorn-middleware-auth.yaml
+        KUBECONFIG={{ kubeconfig_path }} {{ kubectl_bin }} apply -f /tmp/longhorn-middleware-auth.yaml
+      changed_when: true
 
     - name: 🚀 Aplicar IngressRoute (Interno)
       shell: |
-        export KUBECONFIG={{ kubeconfig_path }}
-        {{ kubectl_bin }} apply -f /tmp/longhorn-ingressroute-internal.yaml
+        KUBECONFIG={{ kubeconfig_path }} {{ kubectl_bin }} apply -f /tmp/longhorn-ingressroute-internal.yaml
+      changed_when: true

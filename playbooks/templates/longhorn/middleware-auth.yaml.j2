@@ -1,9 +1,17 @@
-# playbooks\templates\longhorn-dashboard-auth-middleware.yaml.j2
+# playbooks/templates/longhorn-dashboard-auth-middleware.yaml.j2
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: longhorn-dashboard-auth
   namespace: {{ namespace }}
+  labels:
+    app.kubernetes.io/name: longhorn
+    app.kubernetes.io/component: middleware
+    access: internal
+    environment: prod
+  annotations:
+    maintained-by: devops@socialdevs.site
+    created-by: ansible
 spec:
   basicAuth:
-    secret: {{ secret_name }}
+    secret: "{{ secret_name }}"  # Secret generado y sellado con kubeseal
