@@ -7,7 +7,7 @@
 
   vars:
     cert_dir: "/tmp/longhorn-cert"
-    tls_secret_name: "internal-tls-secret"
+    tls_secret_name: "longhorn-tls-secret"
     tls_namespace: "longhorn-system"
     domain_name: "longhorn.socialdevs.site"
     kubeconfig_path: "/home/victory/.kube/config"
