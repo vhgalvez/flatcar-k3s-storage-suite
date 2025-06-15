@@ -6,7 +6,7 @@
   gather_facts: false
 
   vars_files:
-    - ../vars/main.yml  # Usa longhorn_auth_user, longhorn_auth_pass, longhorn_namespace, domain
+    - ../vars/main.yml # Usa longhorn_auth_user, longhorn_auth_pass, longhorn_namespace, domain
 
   vars:
     kubeconfig_path: "/home/victory/.kube/config"
@@ -20,7 +20,6 @@
     middleware_name: "longhorn-dashboard-auth"
 
   tasks:
-
     - name: 📁 Crear directorio local para secrets (si no existe)
       file:
         path: "{{ files_dir }}"
