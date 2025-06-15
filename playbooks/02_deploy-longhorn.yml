@@ -13,7 +13,6 @@
     longhorn_release: "longhorn"
 
   pre_tasks:
-
     - name: 🔧 Crear namespace Longhorn si no existe
       command: >
         {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} create namespace {{ longhorn_namespace }}
@@ -42,12 +41,10 @@
         - "'No resources found' not in longhorn_check.stdout"
 
   tasks:
-
     - name: 📝 Copiar valores personalizados de Longhorn (UI sin NodePort hardcodeado)
       template:
         src: templates/longhorn/longhorn_values.yaml.j2
         dest: /tmp/longhorn-values.yaml
-
 
     - name: 📥 Añadir repositorio Helm de Longhorn (si no existe)
       command: >
