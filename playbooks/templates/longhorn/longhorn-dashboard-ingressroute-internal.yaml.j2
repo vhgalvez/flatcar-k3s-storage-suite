@@ -16,10 +16,11 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: "Host(`{{ domain }}`) && PathPrefix(`/`)"
+    - match: "Host(`{{ domain }}`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))"
       kind: Rule
       middlewares:
         - name: {{ middleware_name }}
+          namespace: {{ namespace }}
       services:
         - name: longhorn-frontend
           port: 80
