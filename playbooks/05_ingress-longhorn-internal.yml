@@ -36,7 +36,7 @@
 
     - name: 📄 Renderizar plantilla del Secret plano (YAML)
       template:
-        src: ../templates/secrets/basic-auth-secret.yaml.j2
+        src: templates/secrets/basic-auth-secret.yaml.j2
         dest: "{{ rendered_secret_path }}"
       vars:
         basic_auth: "{{ htpasswd_output.stdout | b64encode }}"
@@ -68,7 +68,7 @@
 
     - name: 📄 Renderizar Middleware de autenticación
       template:
-        src: ../templates/traefik/longhorn-dashboard-auth-middleware.yaml.j2
+        src: templates/longhorn/longhorn-dashboard-auth-middleware.yaml.j2
         dest: /tmp/longhorn-dashboard-auth-middleware.yaml
       vars:
         secret_name: "{{ secret_name }}"
@@ -76,7 +76,7 @@
 
     - name: 📄 Renderizar IngressRoute para el Dashboard
       template:
-        src: ../templates/traefik/longhorn-dashboard-ingressroute-internal.yaml.j2
+        src: templates/longhorn/longhorn-dashboard-ingressroute-internal.yaml.j2
         dest: /tmp/longhorn-dashboard-ingressroute-internal.yaml
       vars:
         domain: "{{ domain }}"
