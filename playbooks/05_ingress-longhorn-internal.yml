@@ -6,7 +6,7 @@
   gather_facts: false
 
   vars_files:
-    - ../vars/main.yml  # Define: longhorn_auth_user, longhorn_auth_pass, longhorn_namespace, domain
+    - ../vars/main.yml  # Usa longhorn_auth_user, longhorn_auth_pass, longhorn_namespace, domain
 
   vars:
     kubeconfig_path: "/home/victory/.kube/config"
@@ -36,12 +36,10 @@
 
     - name: 📄 Renderizar plantilla del Secret plano (YAML)
       template:
-        src: ../templates/secrets/basic-auth-secret.yaml.j2
+        src: templates/secrets/basic-auth-secret.yaml.j2
         dest: "{{ rendered_secret_path }}"
       vars:
         basic_auth: "{{ htpasswd_output.stdout | b64encode }}"
-        secret_name: "{{ secret_name }}"
-        namespace: "{{ longhorn_namespace }}"
 
     - name: 🔐 Cifrar el Secret con kubeseal (SealedSecret)
       shell: >
@@ -68,20 +66,13 @@
 
     - name: 📄 Renderizar Middleware de autenticación
       template:
-        src: ../templates/longhorn/longhorn-dashboard-auth-middleware.yaml.j2
+        src: templates/longhorn/longhorn-dashboard-auth-middleware.yaml.j2
         dest: /tmp/longhorn-dashboard-auth-middleware.yaml
-      vars:
-        secret_name: "{{ secret_name }}"
-        namespace: "{{ longhorn_namespace }}"
 
     - name: 📄 Renderizar IngressRoute para el Dashboard
       template:
-        src: ../templates/longhorn/longhorn-dashboard-ingressroute-internal.yaml.j2
+        src: templates/longhorn/longhorn-dashboard-ingressroute-internal.yaml.j2
         dest: /tmp/longhorn-dashboard-ingressroute-internal.yaml
-      vars:
-        domain: "{{ domain }}"
-        middleware_name: "{{ middleware_name }}"
-        namespace: "{{ longhorn_namespace }}"
 
     - name: 🚀 Aplicar Middleware (auth)
       shell: >
