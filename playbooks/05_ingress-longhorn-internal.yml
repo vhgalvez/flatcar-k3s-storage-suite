@@ -85,3 +85,16 @@
         {{ kubectl_path }} apply -f /tmp/longhorn-dashboard-ingressroute-internal.yaml
       environment:
         KUBECONFIG: "{{ kubeconfig_path }}"
+
+    - name: 🌐 Verificar acceso al Dashboard de Longhorn (modo tolerante)
+      ansible.builtin.shell: >
+        curl -k -u {{ longhorn_auth_user }}:{{ longhorn_auth_pass }} https://{{ domain }}/
+        --max-time 10 --silent --output /dev/null --write-out '%{http_code}'
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      register: dashboard_access_check
+      failed_when: >
+        dashboard_access_check.stdout is defined and
+        dashboard_access_check.stdout not in ["200", "302", "401"]
+      changed_when: false
+      ignore_errors: true
