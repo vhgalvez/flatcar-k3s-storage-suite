@@ -5,11 +5,12 @@
   become: true
   gather_facts: false
 
+  vars_files:
+    - ../vars/main.yml
+
   vars:
     cert_dir: "/tmp/longhorn-cert"
     tls_secret_name: "longhorn-tls-secret"
-    tls_namespace: "longhorn-system"
-    domain_name: "longhorn.socialdevs.site"
     kubeconfig_path: "/home/victory/.kube/config"
     openssl_bin: "/usr/bin/openssl"
     kubectl_bin: "/usr/local/bin/kubectl"
@@ -21,9 +22,9 @@
         path: "{{ openssl_bin }}"
       register: openssl_check
 
-    - name: ❌ Error si openssl no está instalado
+    - name: ❌ Abortamos si no se encuentra openssl
       fail:
-        msg: "openssl no encontrado en {{ openssl_bin }}"
+        msg: "openssl no está instalado en {{ openssl_bin }}"
       when: not openssl_check.stat.exists
 
     - name: ✅ Verificar que kubectl está instalado
@@ -31,9 +32,9 @@
         path: "{{ kubectl_bin }}"
       register: kubectl_check
 
-    - name: ❌ Error si kubectl no está instalado
+    - name: ❌ Abortamos si no se encuentra kubectl
       fail:
-        msg: "kubectl no encontrado en {{ kubectl_bin }}"
+        msg: "kubectl no está instalado en {{ kubectl_bin }}"
       when: not kubectl_check.stat.exists
 
     - name: 📁 Crear carpeta temporal para certificados
@@ -42,16 +43,16 @@
         state: directory
         mode: '0755'
 
-    - name: 🔐 Generar clave privada
+    - name: 🔐 Generar clave privada si no existe
       command: >
         {{ openssl_bin }} genrsa -out {{ cert_dir }}/tls.key 2048
       args:
         creates: "{{ cert_dir }}/tls.key"
 
-    - name: 🧾 Generar certificado autofirmado para {{ domain_name }}
+    - name: 🧾 Generar certificado autofirmado si no existe
       command: >
         {{ openssl_bin }} req -x509 -nodes -days 3650
-        -subj "/CN={{ domain_name }}"
+        -subj "/CN={{ domain }}"
         -newkey rsa:2048
         -keyout {{ cert_dir }}/tls.key
         -out {{ cert_dir }}/tls.crt
@@ -60,7 +61,7 @@
 
     - name: 🔐 Crear o actualizar secret TLS en Kubernetes
       shell: |
-        KUBECONFIG={{ kubeconfig_path }} {{ kubectl_bin }} -n {{ tls_namespace }} create secret tls {{ tls_secret_name }} \
+        {{ kubectl_bin }} -n {{ longhorn_namespace }} create secret tls {{ tls_secret_name }} \
           --cert={{ cert_dir }}/tls.crt \
           --key={{ cert_dir }}/tls.key \
           --dry-run=client -o yaml | {{ kubectl_bin }} apply -f -
@@ -69,6 +70,6 @@
       environment:
         KUBECONFIG: "{{ kubeconfig_path }}"
 
-    - name: ✅ Resultado del secret TLS
+    - name: ✅ Mostrar resultado del TLS Secret
       debug:
         var: secret_result.stdout_lines

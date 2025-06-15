@@ -5,6 +5,9 @@
   become: false
   gather_facts: false
 
+  vars_files:
+    - ../vars/main.yml  # Usa longhorn_auth_user, longhorn_auth_pass, longhorn_namespace, domain
+
   vars:
     kubeconfig_path: "/home/victory/.kube/config"
     kubeseal_path: "/usr/local/bin/kubeseal"
@@ -13,14 +16,11 @@
     files_dir: "{{ playbook_dir }}/files"
     rendered_secret_path: "{{ files_dir }}/longhorn-dashboard-secret.yaml"
     sealed_secret_path: "{{ files_dir }}/longhorn-dashboard-sealed.yaml"
-    longhorn_namespace: "longhorn-system"
     secret_name: "longhorn-dashboard-auth"
     middleware_name: "longhorn-dashboard-auth"
-    domain: "longhorn.socialdevs.site"
-    longhorn_auth_user: "admin"
-    longhorn_auth_pass: "SuperPassword123"
 
   tasks:
+
     - name: 📁 Crear directorio local para secrets (si no existe)
       file:
         path: "{{ files_dir }}"
@@ -30,16 +30,16 @@
     - name: 🔐 Generar hash htpasswd (basicAuth con MD5)
       command: >
         {{ python_bin }} -c "import crypt; print('{{ longhorn_auth_user }}:' + crypt.crypt('{{ longhorn_auth_pass }}', crypt.mksalt(crypt.METHOD_MD5)))"
-      register: longhorn_htpasswd_output
+      register: htpasswd_output
       changed_when: true
-      failed_when: longhorn_htpasswd_output.rc != 0 or longhorn_htpasswd_output.stdout == ""
+      failed_when: htpasswd_output.rc != 0 or htpasswd_output.stdout == ""
 
     - name: 📄 Renderizar plantilla del Secret plano (YAML)
       template:
-        src: templates/secrets/basic-auth-secret.yaml.j2
+        src: ../templates/secrets/basic-auth-secret.yaml.j2
         dest: "{{ rendered_secret_path }}"
       vars:
-        basic_auth: "{{ longhorn_htpasswd_output.stdout }}"
+        basic_auth: "{{ htpasswd_output.stdout | b64encode }}"
         secret_name: "{{ secret_name }}"
         namespace: "{{ longhorn_namespace }}"
 
@@ -68,7 +68,7 @@
 
     - name: 📄 Renderizar Middleware de autenticación
       template:
-        src: templates/longhorn-dashboard-auth-middleware.yaml.j2
+        src: ../templates/traefik/longhorn-dashboard-auth-middleware.yaml.j2
         dest: /tmp/longhorn-dashboard-auth-middleware.yaml
       vars:
         secret_name: "{{ secret_name }}"
@@ -76,7 +76,7 @@
 
     - name: 📄 Renderizar IngressRoute para el Dashboard
       template:
-        src: templates/longhorn-dashboard-ingressroute-internal.yaml.j2
+        src: ../templates/traefik/longhorn-dashboard-ingressroute-internal.yaml.j2
         dest: /tmp/longhorn-dashboard-ingressroute-internal.yaml
       vars:
         domain: "{{ domain }}"
@@ -84,13 +84,13 @@
         namespace: "{{ longhorn_namespace }}"
 
     - name: 🚀 Aplicar Middleware (auth)
-      shell: |
+      shell: >
         {{ kubectl_path }} apply -f /tmp/longhorn-dashboard-auth-middleware.yaml
       environment:
         KUBECONFIG: "{{ kubeconfig_path }}"
 
     - name: 🚀 Aplicar IngressRoute
-      shell: |
+      shell: >
         {{ kubectl_path }} apply -f /tmp/longhorn-dashboard-ingressroute-internal.yaml
       environment:
         KUBECONFIG: "{{ kubeconfig_path }}"

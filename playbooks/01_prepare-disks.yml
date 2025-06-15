@@ -5,51 +5,52 @@
   become: true
   gather_facts: false
 
-  tasks:
-    # === REQUISITOS PARA LONGHORN ===
+  vars_files:
+    - ../vars/main.yml  # 👈 Variables como longhorn_namespace si se usan aquí o en el futuro
 
-    - name: 📦 Instalar paquete iSCSI initiator (RHEL-based)
+  tasks:
+    # === DEPENDENCIAS LONGHORN ===
+
+    - name: 📦 Instalar paquete iSCSI initiator (multiplataforma)
       raw: |
-        which iscsiadm || (dnf install -y iscsi-initiator-utils)
-      register: iscsi_rhel_install
-      changed_when: "'Complete!' in iscsi_rhel_install.stdout or 'installed' in iscsi_rhel_install.stdout"
+        which iscsiadm || \
+        (apk add open-iscsi || apt-get update && apt-get install -y open-iscsi || dnf install -y iscsi-initiator-utils)
+      register: iscsi_install
+      changed_when: iscsi_install.stdout is search("installed|Complete")
       failed_when: false
       tags: install
 
-    - name: 🔄 Activar y arrancar iscsid (RHEL-based)
-      raw: systemctl enable --now iscsid
-      when: iscsi_rhel_install is defined
+    - name: 🔄 Activar iscsid (si aplica)
+      raw: systemctl enable --now iscsid || true
       ignore_errors: true
       tags: install
 
-    # === VALIDACIÓN INICIAL SEGURA ===
+    # === SEGURIDAD DISCO ===
 
-    - name: 🔒 Bloquear si /dev/vdb está montado (para evitar sobrescritura)
-      raw: |
-        mount | grep -q '^/dev/vdb' && echo "❌ /dev/vdb está montado. Abortando." && exit 1 || exit 0
+    - name: 🔒 Bloquear si /dev/vdb está montado
+      raw: mount | grep -q '^/dev/vdb' && echo "❌ /dev/vdb está montado. Abortando." && exit 1 || exit 0
       register: vdb_mount_check
       failed_when: vdb_mount_check.rc != 0
       changed_when: false
       tags: safety
 
-    - name: ❌ Bloquear si /dev/vdb tiene particiones o LVM activas
-      raw: |
-        lsblk -no TYPE /dev/vdb | grep -qE 'part|lvm' && echo "❌ /dev/vdb tiene particiones o LVM activas. Abortando." && exit 1 || exit 0
+    - name: ❌ Bloquear si /dev/vdb tiene particiones activas
+      raw: lsblk -no TYPE /dev/vdb | grep -qE 'part|lvm' && echo "❌ /dev/vdb tiene particiones activas. Abortando." && exit 1 || exit 0
       register: vdb_lvm_check
       failed_when: vdb_lvm_check.rc != 0
       changed_when: false
       tags: safety
 
-    - name: 📀 Verificar existencia del disco /dev/vdb
+    - name: 📀 Verificar existencia de /dev/vdb
       raw: test -b /dev/vdb
       register: disk_check
       failed_when: disk_check.rc != 0
       changed_when: false
       tags: check
 
-    # === BLOQUE STORAGE ===
+    # === STORAGE NODES ===
 
-    - name: 🧹 Crear tabla de particiones GPT
+    - name: 🧹 Crear tabla GPT
       raw: parted -s /dev/vdb mklabel gpt
       when: "'storage' in group_names"
       tags: storage
@@ -59,13 +60,9 @@
       when: "'storage' in group_names"
       tags: storage
 
-    - name: ⏳ Esperar a que /dev/vdb1 aparezca
+    - name: ⏳ Esperar a que aparezca /dev/vdb1
       raw: |
-        for i in $(seq 1 5); do
-          test -b /dev/vdb1 && exit 0
-          sleep 1
-        done
-        exit 1
+        for i in $(seq 1 5); do test -b /dev/vdb1 && exit 0; sleep 1; done; exit 1
       register: wait_partition
       failed_when: wait_partition.rc != 0
       when: "'storage' in group_names"
@@ -102,7 +99,7 @@
       when: "'storage' in group_names"
       tags: storage
 
-    - name: 🔗 Montar volúmenes en storage
+    - name: 🔗 Montar volúmenes
       raw: |
         mount /dev/vg_storage/postgres_lv /srv/nfs/postgresql
         mount /dev/vg_storage/shared_lv /srv/nfs/shared
@@ -110,52 +107,51 @@
       when: "'storage' in group_names"
       tags: storage
 
-    - name: 📦 Instalar servidor NFS
+    - name: 📦 Instalar NFS server
       raw: |
-        which exportfs >/dev/null 2>&1 || \
-        (apk add nfs-utils || yum install -y nfs-utils || apt-get install -y nfs-kernel-server)
+        which exportfs || (apk add nfs-utils || apt-get install -y nfs-kernel-server || yum install -y nfs-utils)
       when: "'storage' in group_names"
       tags: storage
 
-    - name: 📝 Configurar /etc/exports para NFS
+    - name: 📝 Configurar /etc/exports
       raw: |
         echo "/srv/nfs/postgresql *(rw,sync,no_subtree_check,no_root_squash)" > /etc/exports
         echo "/srv/nfs/shared *(rw,sync,no_subtree_check,no_root_squash)" >> /etc/exports
       when: "'storage' in group_names"
       tags: storage
 
-    - name: 🔄 Habilitar y reiniciar NFS
+    - name: 🔄 Reiniciar servicio NFS
       raw: |
         (systemctl enable nfs-server && systemctl restart nfs-server) || rc-service nfs restart || true
       when: "'storage' in group_names"
       tags: storage
 
-    # === BLOQUE WORKERS ===
+    # === WORKERS ===
 
     - name: 💽 Formatear /dev/vdb como ext4
       raw: mkfs.ext4 -F /dev/vdb
       when: "'workers' in group_names"
       tags: workers
 
-    - name: 📁 Crear punto de montaje para Longhorn
+    - name: 📁 Crear punto de montaje
       raw: mkdir -p /mnt/longhorn-disk
       when: "'workers' in group_names"
       tags: workers
 
-    - name: 🔗 Montar /dev/vdb en /mnt/longhorn-disk
+    - name: 🔗 Montar disco en /mnt/longhorn-disk
       raw: mount /dev/vdb /mnt/longhorn-disk
       when: "'workers' in group_names"
       tags: workers
 
-    # === VALIDACIÓN GENERAL ===
+    # === VALIDACIÓN ===
 
-    - name: ✅ Validar montaje final
+    - name: ✅ Validar montajes
       raw: df -h | grep -E "/srv/nfs/postgresql|/srv/nfs/shared|/mnt/longhorn-disk"
       register: mount_check
       failed_when: mount_check.rc != 0
       tags: verify
 
-    - name: 🟢 Mostrar estado de montajes
+    - name: 🟢 Mostrar resultado de montajes
       debug:
         var: mount_check.stdout_lines
       tags: verify
