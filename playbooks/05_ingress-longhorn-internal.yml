@@ -6,7 +6,7 @@
   gather_facts: false
 
   vars_files:
-    - ../vars/main.yml # Usa longhorn_auth_user, longhorn_auth_pass, longhorn_namespace, domain
+    - ../vars/main.yml  # longhorn_auth_user, longhorn_auth_pass, domain, ns
 
   vars:
     kubeconfig_path: "/home/victory/.kube/config"
@@ -18,6 +18,8 @@
     sealed_secret_path: "{{ files_dir }}/longhorn-dashboard-sealed.yaml"
     secret_name: "longhorn-dashboard-auth"
     middleware_name: "longhorn-dashboard-auth"
+    ns: "{{ longhorn_namespace }}"
+    domain: "{{ domain }}"
 
   tasks:
     - name: 📁 Crear directorio local para secrets (si no existe)
@@ -39,12 +41,14 @@
         dest: "{{ rendered_secret_path }}"
       vars:
         basic_auth: "{{ htpasswd_output.stdout | b64encode }}"
+        secret_name: "{{ secret_name }}"
+        namespace: "{{ ns }}"
 
     - name: 🔐 Cifrar el Secret con kubeseal (SealedSecret)
       shell: >
         {{ kubeseal_path }}
         --controller-name sealed-secrets-controller
-        --controller-namespace {{ longhorn_namespace }}
+        --controller-namespace {{ ns }}
         --format yaml
         < "{{ rendered_secret_path }}" > "{{ sealed_secret_path }}"
       args:
@@ -53,6 +57,14 @@
         KUBECONFIG: "{{ kubeconfig_path }}"
       register: seal_output
       failed_when: seal_output.rc != 0
+      when: not ansible_check_mode
+
+    - name: 📅 Mostrar diff del SealedSecret (modo check)
+      command: >
+        {{ kubectl_path }} diff -f "{{ sealed_secret_path }}"
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      when: ansible_check_mode
 
     - name: 🚀 Aplicar el SealedSecret al clúster
       shell: >
@@ -62,38 +74,61 @@
       register: apply_output
       changed_when: "'created' in apply_output.stdout or 'configured' in apply_output.stdout"
       failed_when: apply_output.rc != 0
+      when: not ansible_check_mode
 
     - name: 📄 Renderizar Middleware de autenticación
       template:
         src: templates/longhorn/longhorn-dashboard-auth-middleware.yaml.j2
         dest: /tmp/longhorn-dashboard-auth-middleware.yaml
+      vars:
+        secret_name: "{{ secret_name }}"
+        middleware_name: "{{ middleware_name }}"
+        ns: "{{ ns }}"
 
     - name: 📄 Renderizar IngressRoute para el Dashboard
       template:
         src: templates/longhorn/longhorn-dashboard-ingressroute-internal.yaml.j2
         dest: /tmp/longhorn-dashboard-ingressroute-internal.yaml
+      vars:
+        domain: "{{ domain }}"
+        middleware_name: "{{ middleware_name }}"
+        ns: "{{ ns }}"
+
+    - name: 🚀 Mostrar diff del Middleware (modo check)
+      command: >
+        {{ kubectl_path }} diff -f /tmp/longhorn-dashboard-auth-middleware.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      when: ansible_check_mode
 
     - name: 🚀 Aplicar Middleware (auth)
       shell: >
         {{ kubectl_path }} apply -f /tmp/longhorn-dashboard-auth-middleware.yaml
       environment:
         KUBECONFIG: "{{ kubeconfig_path }}"
+      when: not ansible_check_mode
+
+    - name: 🚀 Mostrar diff del IngressRoute (modo check)
+      command: >
+        {{ kubectl_path }} diff -f /tmp/longhorn-dashboard-ingressroute-internal.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      when: ansible_check_mode
 
     - name: 🚀 Aplicar IngressRoute
       shell: >
         {{ kubectl_path }} apply -f /tmp/longhorn-dashboard-ingressroute-internal.yaml
       environment:
         KUBECONFIG: "{{ kubeconfig_path }}"
+      when: not ansible_check_mode
 
     - name: 🌐 Verificar acceso al Dashboard de Longhorn (modo tolerante)
       ansible.builtin.shell: >
-        curl -k -u {{ longhorn_auth_user }}:{{ longhorn_auth_pass }} https://{{ domain }}/
+        curl -k -u {{ longhorn_auth_user }}:{{ longhorn_auth_pass }} https://{{ domain }}/dashboard/
         --max-time 10 --silent --output /dev/null --write-out '%{http_code}'
-      environment:
-        KUBECONFIG: "{{ kubeconfig_path }}"
       register: dashboard_access_check
+      changed_when: false
+      ignore_errors: true
       failed_when: >
         dashboard_access_check.stdout is defined and
         dashboard_access_check.stdout not in ["200", "302", "401"]
-      changed_when: false
-      ignore_errors: true

@@ -3,7 +3,7 @@ apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: ingressroute-longhorn-internal
-  namespace: {{ namespace }}
+  namespace: {{ ns }}
   labels:
     app.kubernetes.io/name: longhorn
     app.kubernetes.io/component: ingress
@@ -20,7 +20,7 @@ spec:
       kind: Rule
       middlewares:
         - name: {{ middleware_name }}
-          namespace: {{ namespace }}
+          namespace: {{ ns }}
       services:
         - name: longhorn-frontend
           port: 80
