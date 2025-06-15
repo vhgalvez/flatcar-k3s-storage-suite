@@ -45,9 +45,9 @@
 
     - name: 📝 Copiar valores personalizados de Longhorn (UI sin NodePort hardcodeado)
       template:
-        src: templates/longhorn/values.yaml.j2
-        dest: /tmp/longhorn_values.yaml
-        mode: '0644'
+        src: templates/longhorn/longhorn_values.yaml.j2
+        dest: /tmp/longhorn-values.yaml
+
 
     - name: 📥 Añadir repositorio Helm de Longhorn (si no existe)
       command: >
