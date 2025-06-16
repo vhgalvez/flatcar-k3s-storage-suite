@@ -1,4 +1,5 @@
 # vars/main.yml
+
 # Credenciales de autenticación para el dashboard
 longhorn_auth_user: admin
 longhorn_auth_pass: SuperSecure456
