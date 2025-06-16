@@ -1,15 +1,11 @@
 # vars/main.yml
 
-# Credenciales de autenticación para el Dashboard
 longhorn_auth_user: admin
 longhorn_auth_pass: SuperSecure456
 
-# Namespace utilizado en todos los recursos (estandarizado)
-longhorn_namespace: "longhorn-system"
+longhorn_namespace: "longhorn-system"   # usado por playbooks y kubeseal
+namespace: "longhorn-system"            # usado por los templates
 
-# Dominio usado para el acceso al Dashboard
-domain: "longhorn.socialdevs.site"
-
-# Nombre del Secret y del Middleware de autenticación
-secret_name: "longhorn-dashboard-auth"
-middleware_name: "longhorn-dashboard-auth"
+middleware_name: longhorn-dashboard-auth
+secret_name: longhorn-dashboard-auth
+domain: longhorn.socialdevs.site
