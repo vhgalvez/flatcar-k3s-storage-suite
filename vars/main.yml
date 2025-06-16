@@ -1,5 +1,7 @@
 # vars/main.yml
 longhorn_auth_user: admin
 longhorn_auth_pass: SuperSecure456
-longhorn_namespace: longhorn-system
+namespace: longhorn-system
+middleware_name: longhorn-dashboard-auth
+secret_name: longhorn-dashboard-auth
 domain: longhorn.socialdevs.site
