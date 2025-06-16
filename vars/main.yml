@@ -1,11 +1,13 @@
 # vars/main.yml
-
+# Credenciales de autenticación para el dashboard
 longhorn_auth_user: admin
 longhorn_auth_pass: SuperSecure456
 
-longhorn_namespace: "longhorn-system"   # usado por playbooks y kubeseal
-namespace: "longhorn-system"            # usado por los templates
+# Namespace común para Longhorn y los recursos de Traefik
+longhorn_namespace: "longhorn-system"
+namespace_tpl: "longhorn-system"  # Se usa solo en los templates
 
+# Configuración de autenticación e Ingress
 middleware_name: longhorn-dashboard-auth
 secret_name: longhorn-dashboard-auth
 domain: longhorn.socialdevs.site
