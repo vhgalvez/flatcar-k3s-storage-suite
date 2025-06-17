@@ -27,6 +27,18 @@ Este proyecto Ansible proporciona playbooks seguros para configurar almacenamien
 
 ---
 
+## 📋 Tareas Incluidas
+
+Este proyecto utiliza playbooks en lugar de roles. Las tareas están organizadas de la siguiente manera:
+
+1. **Preparación de discos**: Configura discos en nodos de almacenamiento y workers.
+2. **Despliegue de Longhorn**: Instala y configura Longhorn en el clúster.
+3. **Certificados TLS**: Genera certificados autofirmados para acceso seguro.
+4. **Autenticación**: Genera y cifra secretos para autenticación básica.
+5. **Exposición del Dashboard**: Configura IngressRoute interno para el dashboard de Longhorn.
+
+---
+
 ## ✅ Ejecución Segura - Paso a Paso
 
 ### 1. Configurar Acceso SSH
