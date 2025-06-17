@@ -3,7 +3,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: {{ middleware_name }}
-  namespace: {{ namespace_tpl }}
+  namespace: {{ longhorn_namespace }}
   labels:
     app.kubernetes.io/name: longhorn
     app.kubernetes.io/component: middleware
