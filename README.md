@@ -87,6 +87,9 @@ Verifique:
 - Desmonta volúmenes.
 - Borra LVM y particiones.
 - Seguro para reprovisionar nodos.
+### 🚗 `fix_traefik_port.yml`
+- Reconcilia los puertos del Service de Traefik para exponer el dashboard.
+- Si gestionas Traefik con Helm, ejecuta `helm upgrade` tras aplicar este playbook.
 
 ---
 
@@ -245,6 +248,7 @@ flatcar-k3s-storage-suite/
 │   ├── 03_generate-selfsigned-certs.yml    # Certificados autofirmados
 │   ├── 04_generate-auth-secret.yml         # Autenticación básica
 │   ├── 05_ingress-longhorn-internal.yml    # IngressRoute + middleware
+│   ├── fix_traefik_port.yml                # Reconcilia puertos del Service
 │   ├── 99_cleanup-longhorn.yml             # Limpieza completa
 │
 │   └── templates/
