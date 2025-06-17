@@ -6,7 +6,6 @@ longhorn_auth_pass: SuperSecure456
 
 # Namespace común para Longhorn y los recursos de Traefik
 longhorn_namespace: "longhorn-system"
-namespace_tpl: "longhorn-system"  # Se usa solo en los templates
 
 # Configuración de autenticación e Ingress
 middleware_name: longhorn-dashboard-auth

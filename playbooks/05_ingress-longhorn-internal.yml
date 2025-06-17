@@ -16,119 +16,34 @@
     files_dir: "{{ playbook_dir }}/files"
     rendered_secret_path: "{{ files_dir }}/longhorn-dashboard-secret.yaml"
     sealed_secret_path: "{{ files_dir }}/longhorn-dashboard-sealed.yaml"
-    secret_name: "longhorn-dashboard-auth"
-    middleware_name: "longhorn-dashboard-auth"
-    ns: "{{ longhorn_namespace }}"
-    domain: "{{ domain }}"
 
   tasks:
-    - name: 📁 Crear directorio local para secrets (si no existe)
-      file:
-        path: "{{ files_dir }}"
-        state: directory
-        mode: "0755"
-
-    - name: 🔐 Generar hash htpasswd (basicAuth con MD5)
-      command: >
-        {{ python_bin }} -c "import crypt; print('{{ longhorn_auth_user }}:' + crypt.crypt('{{ longhorn_auth_pass }}', crypt.mksalt(crypt.METHOD_MD5)))"
-      register: htpasswd_output
-      changed_when: true
-      failed_when: htpasswd_output.rc != 0 or htpasswd_output.stdout == ""
-
-    - name: 📄 Renderizar plantilla del Secret plano (YAML)
-      template:
-        src: templates/secrets/basic-auth-secret.yaml.j2
-        dest: "{{ rendered_secret_path }}"
-      vars:
-        basic_auth: "{{ htpasswd_output.stdout | b64encode }}"
-        secret_name: "{{ secret_name }}"
-        namespace: "{{ ns }}"
-
-    - name: 🔐 Cifrar el Secret con kubeseal (SealedSecret)
-      shell: >
-        {{ kubeseal_path }}
-        --controller-name sealed-secrets-controller
-        --controller-namespace {{ ns }}
-        --format yaml
-        < "{{ rendered_secret_path }}" > "{{ sealed_secret_path }}"
-      args:
-        executable: /bin/bash
-      environment:
-        KUBECONFIG: "{{ kubeconfig_path }}"
-      register: seal_output
-      failed_when: seal_output.rc != 0
-      when: not ansible_check_mode
-
-    - name: 📅 Mostrar diff del SealedSecret (modo check)
-      command: >
-        {{ kubectl_path }} diff -f "{{ sealed_secret_path }}"
-      environment:
-        KUBECONFIG: "{{ kubeconfig_path }}"
-      when: ansible_check_mode
-
-    - name: 🚀 Aplicar el SealedSecret al clúster
-      shell: >
-        {{ kubectl_path }} apply -f "{{ sealed_secret_path }}"
-      environment:
-        KUBECONFIG: "{{ kubeconfig_path }}"
-      register: apply_output
-      changed_when: "'created' in apply_output.stdout or 'configured' in apply_output.stdout"
-      failed_when: apply_output.rc != 0
-      when: not ansible_check_mode
-
     - name: 📄 Renderizar Middleware de autenticación
       template:
-        src: templates/longhorn/longhorn-dashboard-auth-middleware.yaml.j2
-        dest: /tmp/longhorn-dashboard-auth-middleware.yaml
-      vars:
-        secret_name: "{{ secret_name }}"
-        middleware_name: "{{ middleware_name }}"
-        ns: "{{ ns }}"
+        src: playbooks/templates/longhorn/longhorn-dashboard-auth-middleware.yaml.j2
+        dest: "{{ files_dir }}/longhorn-dashboard-auth.yaml"
 
     - name: 📄 Renderizar IngressRoute para el Dashboard
       template:
-        src: templates/longhorn/longhorn-dashboard-ingressroute-internal.yaml.j2
-        dest: /tmp/longhorn-dashboard-ingressroute-internal.yaml
-      vars:
-        domain: "{{ domain }}"
-        middleware_name: "{{ middleware_name }}"
-        ns: "{{ ns }}"
+        src: playbooks/templates/longhorn/longhorn-dashboard-ingressroute-internal.yaml.j2
+        dest: "{{ files_dir }}/longhorn-dashboard-ingressroute.yaml"
 
     - name: 🚀 Mostrar diff del Middleware (modo check)
       command: >
-        {{ kubectl_path }} diff -f /tmp/longhorn-dashboard-auth-middleware.yaml
-      environment:
-        KUBECONFIG: "{{ kubeconfig_path }}"
+        kubectl diff -f "{{ files_dir }}/longhorn-dashboard-auth.yaml"
       when: ansible_check_mode
 
     - name: 🚀 Aplicar Middleware (auth)
       shell: >
-        {{ kubectl_path }} apply -f /tmp/longhorn-dashboard-auth-middleware.yaml
-      environment:
-        KUBECONFIG: "{{ kubeconfig_path }}"
+        kubectl apply -f "{{ files_dir }}/longhorn-dashboard-auth.yaml"
       when: not ansible_check_mode
 
     - name: 🚀 Mostrar diff del IngressRoute (modo check)
       command: >
-        {{ kubectl_path }} diff -f /tmp/longhorn-dashboard-ingressroute-internal.yaml
-      environment:
-        KUBECONFIG: "{{ kubeconfig_path }}"
+        kubectl diff -f "{{ files_dir }}/longhorn-dashboard-ingressroute.yaml"
       when: ansible_check_mode
 
     - name: 🚀 Aplicar IngressRoute
       shell: >
-        {{ kubectl_path }} apply -f /tmp/longhorn-dashboard-ingressroute-internal.yaml
-      environment:
-        KUBECONFIG: "{{ kubeconfig_path }}"
+        kubectl apply -f "{{ files_dir }}/longhorn-dashboard-ingressroute.yaml"
       when: not ansible_check_mode
-
-    - name: 🌐 Verificar acceso al Dashboard de Longhorn (modo tolerante)
-      ansible.builtin.shell: >
-        curl -k -u {{ longhorn_auth_user }}:{{ longhorn_auth_pass }} https://{{ domain }}/dashboard/
-        --max-time 10 --silent --output /dev/null --write-out '%{http_code}'
-      register: dashboard_access_check
-      changed_when: false
-      ignore_errors: true
-      failed_when: >
-        dashboard_access_check.stdout is defined and
-        dashboard_access_check.stdout not in ["200", "302", "401"]
