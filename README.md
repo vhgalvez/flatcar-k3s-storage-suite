@@ -66,15 +66,15 @@ Verifique:
 
 ## 📘 Tareas y su Descripción
 
-### 🧱 `storage_setup` (Rol)
-- Verificación segura de `/dev/vdb`.
-- Particionado y creación de VG + LVs.
-- Montaje y formateo.
-- Exportación NFS.
+### 🧱 Preparación de discos
+ - Verificación segura de `/dev/vdb`.
+ - Particionado y creación de VG + LVs.
+ - Montaje y formateo.
+ - Exportación NFS.
 
-### 💾 `longhorn_worker` (Rol)
-- Verificación segura de `/dev/vdb`.
-- Formateo y montaje en `/mnt/longhorn-disk`.
+### 💾 Configuración de Longhorn
+ - Verificación segura de `/dev/vdb`.
+ - Formateo y montaje en `/mnt/longhorn-disk`.
 
 ### 🚀 `install_longhorn.yml`
 - Etiquetado de nodos.
