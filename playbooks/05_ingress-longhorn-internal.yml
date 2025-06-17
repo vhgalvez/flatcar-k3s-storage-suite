@@ -25,7 +25,7 @@
 
     - name: 📄 Renderizar IngressRoute para el Dashboard
       template:
-        src: playbooks/templates/longhorn/longhorn-dashboard-ingressroute-internal.yaml.j2
+        src: templates/longhorn/longhorn-dashboard-ingressroute-internal.yaml.j2
         dest: "{{ files_dir }}/longhorn-dashboard-ingressroute.yaml"
 
     - name: 🚀 Mostrar diff del Middleware (modo check)
