@@ -20,7 +20,7 @@
   tasks:
     - name: 📄 Renderizar Middleware de autenticación
       template:
-        src: playbooks/templates/longhorn/longhorn-dashboard-auth-middleware.yaml.j2
+        src: templates/longhorn/longhorn-dashboard-auth-middleware.yaml.j2
         dest: "{{ files_dir }}/longhorn-dashboard-auth.yaml"
 
     - name: 📄 Renderizar IngressRoute para el Dashboard
