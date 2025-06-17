@@ -35,7 +35,7 @@
 
     - name: 🚀 Aplicar Middleware (auth)
       shell: >
-        kubectl apply -f "{{ files_dir }}/longhorn-dashboard-auth.yaml"
+        kubectl apply --validate=false -f "{{ files_dir }}/longhorn-dashboard-auth.yaml"
       when: not ansible_check_mode
 
     - name: 🚀 Mostrar diff del IngressRoute (modo check)
@@ -45,5 +45,5 @@
 
     - name: 🚀 Aplicar IngressRoute
       shell: >
-        kubectl apply -f "{{ files_dir }}/longhorn-dashboard-ingressroute.yaml"
+        kubectl apply --validate=false -f "{{ files_dir }}/longhorn-dashboard-ingressroute.yaml"
       when: not ansible_check_mode
