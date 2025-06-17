@@ -6,7 +6,7 @@
   gather_facts: false
 
   vars_files:
-    - ../vars/main.yml  # longhorn_auth_user, longhorn_auth_pass, domain, ns
+    - ../vars/main.yml
 
   vars:
     kubeconfig_path: "/home/victory/.kube/config"
@@ -30,20 +30,24 @@
 
     - name: 🚀 Mostrar diff del Middleware (modo check)
       command: >
-        kubectl diff -f "{{ files_dir }}/longhorn-dashboard-auth.yaml"
+        {{ kubectl_path }} --kubeconfig {{ kubeconfig_path }}
+        diff -f "{{ files_dir }}/longhorn-dashboard-auth.yaml"
       when: ansible_check_mode
 
     - name: 🚀 Aplicar Middleware (auth)
-      shell: >
-        kubectl apply --validate=false -f "{{ files_dir }}/longhorn-dashboard-auth.yaml"
+      command: >
+        {{ kubectl_path }} --kubeconfig {{ kubeconfig_path }}
+        apply --validate=false -f "{{ files_dir }}/longhorn-dashboard-auth.yaml"
       when: not ansible_check_mode
 
     - name: 🚀 Mostrar diff del IngressRoute (modo check)
       command: >
-        kubectl diff -f "{{ files_dir }}/longhorn-dashboard-ingressroute.yaml"
+        {{ kubectl_path }} --kubeconfig {{ kubeconfig_path }}
+        diff -f "{{ files_dir }}/longhorn-dashboard-ingressroute.yaml"
       when: ansible_check_mode
 
     - name: 🚀 Aplicar IngressRoute
-      shell: >
-        kubectl apply --validate=false -f "{{ files_dir }}/longhorn-dashboard-ingressroute.yaml"
+      command: >
+        {{ kubectl_path }} --kubeconfig {{ kubeconfig_path }}
+        apply --validate=false -f "{{ files_dir }}/longhorn-dashboard-ingressroute.yaml"
       when: not ansible_check_mode
