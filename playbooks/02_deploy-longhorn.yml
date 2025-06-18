@@ -47,7 +47,7 @@
       template:
         src: templates/longhorn/longhorn_values.yaml.j2
         dest: /tmp/longhorn-values.yaml
-        mode: '0644'
+        mode: "0644"
 
     - name: 📥 Añadir repositorio Helm de Longhorn (si no existe)
       command: >

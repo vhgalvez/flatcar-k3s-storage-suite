@@ -6,3 +6,9 @@
 # 🛠️ Variables de entorno para Helm y kubectl
 grafana_env:
   PATH: "/usr/local/bin:/usr/bin:/bin"  # PATH extendido para Helm/kubectl desde Ansible
+
+pvc_name: certificados-longhorn
+pvc_namespace: default
+pvc_size: 1Gi
+access_mode: ReadWriteOnce
+storage_class: longhorn
