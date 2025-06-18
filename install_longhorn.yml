@@ -1,5 +1,7 @@
 # install_longhorn.yml
 ---
+# 📦 Instalación completa de Longhorn con seguridad y exposición interna
+
 - name: 📀 1 - Preparar discos en nodos de almacenamiento y workers
   import_playbook: playbooks/01_prepare-disks.yml
 
@@ -14,7 +16,7 @@
 
 - name: 🌐 Verificar acceso al Dashboard (modo tolerante)
   ansible.builtin.shell: >
-    curl -k -u admin:SuperPassword123 https://longhorn.socialdevs.site/dashboard/
+    curl -k -u {{ longhorn_auth_user }}:{{ longhorn_auth_pass }} https://{{ domain }}/dashboard/
     --max-time 10 --silent --output /dev/null --write-out '%{http_code}'
   environment:
     KUBECONFIG: "{{ kubeconfig_path }}"
