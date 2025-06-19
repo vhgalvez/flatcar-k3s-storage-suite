@@ -1,6 +1,5 @@
 # vars/main.yml
 longhorn_namespace: longhorn-system
-
 kubeconfig_path: "/home/victory/.kube/config"
 kubectl_path: "/usr/local/bin/kubectl"
 helm_bin: "/usr/local/bin/helm"

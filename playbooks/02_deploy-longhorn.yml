@@ -1,18 +1,18 @@
 # playbooks/02_deploy-longhorn.yml
 ---
-- name: 🚀 2  Instalar Longhorn (núcleo) desde localhost
+- name: 🚀 2 - Instalar Longhorn (núcleo) desde localhost
   hosts: localhost
   become: true
   gather_facts: false
 
   vars_files:
-    - ../vars/main.yml          # contiene longhorn_namespace, kubeconfig_path, etc.
+    - ../vars/main.yml
 
   vars:
-    kubeconfig_path: "{{ kubeconfig_path }}"
-    kubectl_bin:   "{{ kubectl_path }}"
-    helm_bin:      "{{ helm_bin }}"
     longhorn_release: "longhorn"
+    kubeconfig_path: "{{ kubeconfig_path }}"
+    kubectl_bin: "{{ kubectl_path }}"
+    helm_bin: "{{ helm_bin }}"
 
   pre_tasks:
     - name: 🔧 Crear namespace Longhorn si no existe
@@ -32,8 +32,9 @@
     - name: ❌ Abortamos si el namespace NO está vacío
       fail:
         msg: |
-          ⚠️ El namespace '{{ longhorn_namespace }}' ya tiene objetos.
-          Ejecuta primero cleanup_longhorn.yml si deseas reinstalar.
+          ⚠️ El namespace '{{ longhorn_namespace }}' ya contiene recursos.
+          Ejecuta primero:
+            ansible-playbook playbooks/cleanup_longhorn.yml -i inventory/hosts.ini -e "confirm_cleanup=yes"
           Recursos detectados:
           {{ longhorn_check.stdout | default('') }}
       when:
@@ -48,10 +49,10 @@
       changed_when: "'already exists' not in helm_repo_add.stderr"
       failed_when: false
 
-    - name: 🔄 helm repo update
+    - name: 🔄 Actualizar repositorio Helm
       command: "{{ helm_bin }} repo update"
 
-    - name: 🚀 helm upgrade --install longhorn
+    - name: 🚀 Instalar/Actualizar Longhorn con Helm
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
         {{ helm_bin }} upgrade --install {{ longhorn_release }} longhorn/longhorn \
@@ -62,23 +63,23 @@
       changed_when: "'deployed' in longhorn_install.stdout or 'has been upgraded' in longhorn_install.stdout"
       failed_when: longhorn_install.rc != 0
 
-    - name: ⏳ Esperar que todos los pods estén Ready (max 5 min)
+    - name: ⏳ Esperar que todos los pods estén en estado Ready (máx 5 min)
       shell: >
         {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} wait --for=condition=Ready pod -n {{ longhorn_namespace }} --all --timeout=300s
 
-    - name: 📊 Mostrar estado final (pods + PV/PVC)
+    - name: 📊 Mostrar estado final (pods, PVCs y PVs)
       shell: |
-        echo "Pods:"
+        echo "📦 Pods:"
         {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get pods -n {{ longhorn_namespace }}
         echo ""
-        echo "PVCs:"
+        echo "📁 PVCs:"
         {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get pvc -A
         echo ""
-        echo "PVs:"
+        echo "📦 PVs:"
         {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get pv
       register: volumes_info
       changed_when: false
 
-    - name: ✅ Resultado del despliegue
+    - name: ✅ Resultado del despliegue de Longhorn
       debug:
         var: volumes_info.stdout_lines
