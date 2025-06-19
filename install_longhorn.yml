@@ -2,25 +2,35 @@
 ---
 # 📦 Instalación completa de Longhorn con seguridad y exposición interna
 
-- name: 📀 1 - Preparar discos en nodos de almacenamiento y workers
-  import_playbook: playbooks/01_prepare-disks.yml
-
-- name: 🚀 2 - Desplegar Longhorn desde el nodo controlador
-  import_playbook: playbooks/02_deploy-longhorn.yml
-
-- name: 🔑 3 - Generar y sellar Secret con autenticación básica
-  import_playbook: playbooks/03_generate-auth-secret.yml
-
-- name: 🌐 4 - Crear IngressRoute interno para el dashboard de Longhorn
-  import_playbook: playbooks/04_ingress-longhorn-internal.yml
-
-- name: 🌐 Verificar acceso al Dashboard (modo tolerante)
+- name: 🚀 Instalar y configurar Longhorn con Ingress y autenticación
   hosts: localhost
   gather_facts: false
+  vars_files:
+    - vars/main.yml
+
+  pre_tasks:
+    - name: ✅ Validar que kubeconfig_path esté definido
+      assert:
+        that: kubeconfig_path is defined
+        msg: "❌ kubeconfig_path no está definido en vars/main.yml"
+
   tasks:
+    - name: 📀 1 - Preparar discos en nodos de almacenamiento y workers
+      import_playbook: playbooks/01_prepare-disks.yml
+
+    - name: 🚀 2 - Desplegar Longhorn desde el nodo controlador
+      import_playbook: playbooks/02_deploy-longhorn.yml
+
+    - name: 🔐 3 - Generar y sellar Secret con autenticación básica
+      import_playbook: playbooks/03_generate-auth-secret.yml
+
+    - name: 🌐 4 - Crear IngressRoute interno para el dashboard de Longhorn
+      import_playbook: playbooks/04_ingress-longhorn-internal.yml
+
     - name: 🌐 Verificar acceso al Dashboard (modo tolerante)
-      ansible.builtin.shell: >
-        curl -k -u {{ longhorn_auth_user }}:{{ longhorn_auth_pass }} https://{{ domain }}/dashboard/
+      shell: >
+        curl --http1.1 -k -u {{ longhorn_auth_user }}:{{ longhorn_auth_pass }}
+        https://{{ domain }}/dashboard/
         --max-time 10 --silent --output /dev/null --write-out '%{http_code}'
       environment:
         KUBECONFIG: "{{ kubeconfig_path }}"
