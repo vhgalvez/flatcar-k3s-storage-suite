@@ -1,17 +1,17 @@
 # playbooks/02_deploy-longhorn.yml
 ---
-- name: 🚀 2 - Instalar Longhorn desde el nodo localhost
+- name: 🚀 2  Instalar Longhorn (núcleo) desde localhost
   hosts: localhost
   become: true
   gather_facts: false
 
   vars_files:
-    - ../vars/main.yml
+    - ../vars/main.yml          # contiene longhorn_namespace, kubeconfig_path, etc.
 
   vars:
-    kubeconfig_path: "/home/victory/.kube/config"
-    kubectl_bin: "/usr/local/bin/kubectl"
-    helm_bin: "/usr/local/bin/helm"
+    kubeconfig_path: "{{ kubeconfig_path }}"
+    kubectl_bin:   "{{ kubectl_path }}"
+    helm_bin:      "{{ helm_bin }}"
     longhorn_release: "longhorn"
 
   pre_tasks:
@@ -22,87 +22,63 @@
       changed_when: "'created' in ns_create.stdout"
       failed_when: ns_create.rc != 0 and 'AlreadyExists' not in ns_create.stderr
 
-    - name: ⚠️ Verificar si el namespace '{{ longhorn_namespace }}' contiene recursos
+    - name: ⚠️ Verificar si el namespace contiene recursos previos
       command: >
         {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get all -n {{ longhorn_namespace }}
       register: longhorn_check
       changed_when: false
       failed_when: false
 
-    - name: ❌ Abortamos si el namespace tiene recursos existentes
+    - name: ❌ Abortamos si el namespace NO está vacío
       fail:
         msg: |
-          ⚠️ El namespace '{{ longhorn_namespace }}' ya contiene recursos de una instalación anterior.
-          🧹 Ejecuta:
-            ansible-playbook playbooks/cleanup_longhorn.yml -i inventory/hosts.ini -e "confirm_cleanup=yes"
+          ⚠️ El namespace '{{ longhorn_namespace }}' ya tiene objetos.
+          Ejecuta primero cleanup_longhorn.yml si deseas reinstalar.
           Recursos detectados:
           {{ longhorn_check.stdout | default('') }}
       when:
-        - longhorn_check.stdout is defined
         - longhorn_check.stdout | trim != ''
         - "'No resources found' not in longhorn_check.stdout"
 
   tasks:
-    - name: 📝 Copiar archivo de valores personalizado
-      template:
-        src: templates/longhorn/longhorn_values.yaml.j2
-        dest: /tmp/longhorn-values.yaml
-        mode: "0644"
-
-    - name: 📥 Añadir repositorio Helm de Longhorn (si no existe)
+    - name: 📥 Añadir repositorio Helm (Longhorn)
       command: >
         {{ helm_bin }} repo add longhorn https://charts.longhorn.io
       register: helm_repo_add
-      failed_when: false
       changed_when: "'already exists' not in helm_repo_add.stderr"
+      failed_when: false
 
-    - name: 🔄 Actualizar repositorios Helm
-      command: >
-        {{ helm_bin }} repo update
+    - name: 🔄 helm repo update
+      command: "{{ helm_bin }} repo update"
 
-    - name: 🚀 Instalar o actualizar Longhorn con Helm
+    - name: 🚀 helm upgrade --install longhorn
       shell: |
         export KUBECONFIG={{ kubeconfig_path }}
         {{ helm_bin }} upgrade --install {{ longhorn_release }} longhorn/longhorn \
           --namespace {{ longhorn_namespace }} \
           --create-namespace \
-          --values /tmp/longhorn-values.yaml \
           --wait --timeout 10m
       register: longhorn_install
+      changed_when: "'deployed' in longhorn_install.stdout or 'has been upgraded' in longhorn_install.stdout"
       failed_when: longhorn_install.rc != 0
-      changed_when: "'Release' in longhorn_install.stdout or 'deployed' in longhorn_install.stdout"
 
-    - name: ⏳ Verificar que existan pods en Longhorn
-      shell: |
-        for i in {1..24}; do
-          {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get pods -n {{ longhorn_namespace }} --no-headers | grep -qv '^$' && exit 0
-          sleep 5
-        done
-        echo "❌ No se detectaron pods tras 2 minutos"
-        {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get events -n {{ longhorn_namespace }}
-        exit 1
-      register: pod_exist_check
-      failed_when: pod_exist_check.rc != 0
-      changed_when: false
-
-    - name: ⏳ Esperar que todos los pods estén listos (timeout 5 min)
+    - name: ⏳ Esperar que todos los pods estén Ready (max 5 min)
       shell: >
         {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} wait --for=condition=Ready pod -n {{ longhorn_namespace }} --all --timeout=300s
-      register: pod_ready
-      failed_when: pod_ready.rc != 0
 
-    - name: 📊 Mostrar estado de Pods, PVCs y PVs
+    - name: 📊 Mostrar estado final (pods + PV/PVC)
       shell: |
-        echo "📦 Pods:"
+        echo "Pods:"
         {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get pods -n {{ longhorn_namespace }}
         echo ""
-        echo "📁 PVCs:"
+        echo "PVCs:"
         {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get pvc -A
         echo ""
-        echo "📦 PVs:"
+        echo "PVs:"
         {{ kubectl_bin }} --kubeconfig {{ kubeconfig_path }} get pv
       register: volumes_info
+      changed_when: false
 
-    - name: ✅ Resultado del despliegue de Longhorn
+    - name: ✅ Resultado del despliegue
       debug:
         var: volumes_info.stdout_lines
