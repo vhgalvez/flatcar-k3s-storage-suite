@@ -1,19 +1,6 @@
 # vars/main.yml
-
-# Credenciales de autenticación para el dashboard
-longhorn_auth_user: admin
-longhorn_auth_pass: SuperSecure456
-
-# Namespace común para Longhorn y los recursos de Traefik
-longhorn_namespace: "longhorn-system"
-
-# Configuración de autenticación e Ingress
-middleware_name: longhorn-dashboard-auth
-secret_name: longhorn-dashboard-auth
-domain: longhorn.socialdevs.site
-
+longhorn_namespace: longhorn-system
 
 kubeconfig_path: "/home/victory/.kube/config"
-kubeconfig_token_path: "/home/victory/.kube/token.jwt"
-vip_kubernetes: "192.168.0.32"
 kubectl_path: "/usr/local/bin/kubectl"
+helm_bin: "/usr/local/bin/helm"

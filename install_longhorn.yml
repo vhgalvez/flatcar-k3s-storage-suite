@@ -1,42 +1,56 @@
 # install_longhorn.yml
 ---
-# 📦 Instalación completa de Longhorn con seguridad y exposición interna
+# 📦 Instalación de Longhorn (núcleo) – sin UI ni Ingress
 
-- name: 🚀 Instalar y configurar Longhorn con Ingress y autenticación
+- name: 🚀 Desplegar Longhorn Core
   hosts: localhost
   gather_facts: false
   vars_files:
     - vars/main.yml
 
   pre_tasks:
-    - name: ✅ Validar que kubeconfig_path esté definido
+    - name: ✅ Validar que kubeconfig_path está definido
       assert:
-        that: kubeconfig_path is defined
-        msg: "❌ kubeconfig_path no está definido en vars/main.yml"
+        that:
+          - kubeconfig_path is defined
+          - kubectl_path  is defined
+          - helm_bin      is defined
+        fail_msg: "❌ Faltan variables obligatorias en vars/main.yml"
 
   tasks:
-    - name: 📀 1 - Preparar discos en nodos de almacenamiento y workers
+    # 1️⃣ Preparar discos (nodos storage + workers)
+    - name: 📀 1 – Preparar almacenamiento en storage/workers
       import_playbook: playbooks/01_prepare-disks.yml
 
-    - name: 🚀 2 - Desplegar Longhorn desde el nodo controlador
+    # 2️⃣ Instalar Longhorn vía Helm
+    - name: 🚀 2 – Desplegar Longhorn (helm upgrade --install)
       import_playbook: playbooks/02_deploy-longhorn.yml
 
-    - name: 🔐 3 - Generar y sellar Secret con autenticación básica
-      import_playbook: playbooks/03_generate-auth-secret.yml
+    # 3️⃣ Smoke-test opcional: PVC de prueba
+    - name: 🔎 3 – Crear PVC de prueba y esperar Bound
+      shell: |
+        cat <<'EOF' | {{ kubectl_path }} --kubeconfig {{ kubeconfig_path }} apply -f -
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          name: longhorn-test-pvc
+          namespace: {{ longhorn_namespace }}
+        spec:
+          accessModes: [ "ReadWriteOnce" ]
+          resources:
+            requests:
+              storage: 1Gi
+          storageClassName: longhorn
+        EOF
 
-    - name: 🌐 4 - Crear IngressRoute interno para el dashboard de Longhorn
-      import_playbook: playbooks/04_ingress-longhorn-internal.yml
+        {{ kubectl_path }} --kubeconfig {{ kubeconfig_path }} -n {{ longhorn_namespace }} \
+          wait --for=jsonpath='{.status.phase}=Bound' pvc/longhorn-test-pvc --timeout=60s
+      register: pvc_test
+      changed_when: "'created' in pvc_test.stdout"
+      failed_when: pvc_test.rc != 0
 
-    - name: 🌐 Verificar acceso al Dashboard (modo tolerante)
+    - name: 🧹 4 – Eliminar PVC de prueba
       shell: >
-        curl --http1.1 -k -u {{ longhorn_auth_user }}:{{ longhorn_auth_pass }}
-        https://{{ domain }}/dashboard/
-        --max-time 10 --silent --output /dev/null --write-out '%{http_code}'
-      environment:
-        KUBECONFIG: "{{ kubeconfig_path }}"
-      register: dashboard_access_check
-      failed_when: >
-        dashboard_access_check.stdout is defined and
-        dashboard_access_check.stdout not in ["200", "302", "401"]
+        {{ kubectl_path }} --kubeconfig {{ kubeconfig_path }}
+        delete pvc longhorn-test-pvc -n {{ longhorn_namespace }} --ignore-not-found
       changed_when: false
-      ignore_errors: true
