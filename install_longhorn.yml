@@ -2,32 +2,34 @@
 ---
 # 📦 Instalación de Longhorn (núcleo) – sin UI ni Ingress
 
-- name: 🚀 Desplegar Longhorn Core
+- name: ✅ Validar que kubeconfig_path está definido
   hosts: localhost
   gather_facts: false
   vars_files:
     - vars/main.yml
-
-  pre_tasks:
-    - name: ✅ Validar que kubeconfig_path está definido
+  tasks:
+    - name: ✅ Validar variables necesarias
       assert:
         that:
           - kubeconfig_path is defined
-          - kubectl_path  is defined
-          - helm_bin      is defined
+          - kubectl_path is defined
+          - helm_bin is defined
         fail_msg: "❌ Faltan variables obligatorias en vars/main.yml"
 
+# 1️⃣ Preparar discos (nodos storage + workers)
+- import_playbook: playbooks/01_prepare-disks.yml
+
+# 2️⃣ Instalar Longhorn vía Helm
+- import_playbook: playbooks/02_deploy-longhorn.yml
+
+# 3️⃣ Smoke-test opcional: PVC de prueba y limpieza
+- name: 🔎 3 - Crear y eliminar PVC de prueba
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - vars/main.yml
   tasks:
-    # 1️⃣ Preparar discos (nodos storage + workers)
-    - name: 📀 1 – Preparar almacenamiento en storage/workers
-      import_playbook: playbooks/01_prepare-disks.yml
-
-    # 2️⃣ Instalar Longhorn vía Helm
-    - name: 🚀 2 – Desplegar Longhorn (helm upgrade --install)
-      import_playbook: playbooks/02_deploy-longhorn.yml
-
-    # 3️⃣ Smoke-test opcional: PVC de prueba
-    - name: 🔎 3 – Crear PVC de prueba y esperar Bound
+    - name: Crear PVC de prueba y esperar Bound
       shell: |
         cat <<'EOF' | {{ kubectl_path }} --kubeconfig {{ kubeconfig_path }} apply -f -
         apiVersion: v1
@@ -49,7 +51,7 @@
       changed_when: "'created' in pvc_test.stdout"
       failed_when: pvc_test.rc != 0
 
-    - name: 🧹 4 – Eliminar PVC de prueba
+    - name: 🧹 Eliminar PVC de prueba
       shell: >
         {{ kubectl_path }} --kubeconfig {{ kubeconfig_path }}
         delete pvc longhorn-test-pvc -n {{ longhorn_namespace }} --ignore-not-found
