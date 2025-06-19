@@ -1,6 +1,6 @@
 # playbooks\01_prepare-disks.yml
 ---
-- name: 3 - Preparar almacenamiento en nodos storage y workers
+- name: 1 - Preparar almacenamiento en nodos storage y workers
   hosts: storage,workers
   become: true
   gather_facts: false
