@@ -245,7 +245,7 @@ Este conjunto de playbooks garantiza una configuración de almacenamiento automa
 
 Este proyecto está licenciado bajo la **Licencia MIT**. Consulte el archivo [LICENSE](LICENSE) para más detalles.
 
-
+```plaintext
 flatcar-k3s-storage-suite/
 ├── ansible.cfg
 ├── inventory/
@@ -283,3 +283,4 @@ flatcar-k3s-storage-suite/
 ├── install_longhorn.yml                    # (Obsoleto, reemplazado por 01-05)
 ├── LICENSE
 └── README.md
+```
